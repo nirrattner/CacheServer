@@ -4,61 +4,66 @@
 
 #include "memory_queue.h"
 
-static void evict_entry(memory_queue_t *queue);
-static void remove_entry(memory_queue_t *queue, entry_header_t *entry_header);
+typedef struct {
+  void *buffer;
+  uint64_t entry_count;
+  uint64_t occupied_bytes;
+  uint64_t capacity_bytes;
+  uint64_t read_index;
+  uint64_t write_index;
+} memory_queue_context_t;
 
-memory_queue_t *memory_queue_init(uint64_t capacity_bytes) {
-  memory_queue_t *queue = (memory_queue_t *)malloc(sizeof(memory_queue_t));
-  if (queue == NULL) {
-    return NULL;
+static memory_queue_context_t context;
+
+static void evict_entry();
+static void remove_entry(entry_header_t *entry_header);
+
+uint8_t memory_queue_open(uint64_t capacity_bytes) {
+  context.buffer = malloc(capacity_bytes);
+  if (context.buffer == NULL) {
+    memory_queue_close();
+    return 1;
   }
 
-  queue->buffer = malloc(capacity_bytes);
-  if (queue->buffer == NULL) {
-    free(queue);
-    return NULL;
-  }
-
-  queue->entry_count = 0;
-  queue->occupied_bytes = 0;
-  queue->capacity_bytes = capacity_bytes;
-  queue->read_index = 0;
-  queue->write_index = 0;
+  context.entry_count = 0;
+  context.occupied_bytes = 0;
+  context.capacity_bytes = capacity_bytes;
+  context.read_index = 0;
+  context.write_index = 0;
   
-  return queue;
+  return 0;
 }
 
-void memory_queue_deinit(memory_queue_t *queue) {
-  free(queue->buffer);
-  free(queue);
+void memory_queue_close() {
+  free(context.buffer);
 }
 
-entry_header_t *memory_queue_put(memory_queue_t *queue, uint16_t key_size, uint32_t value_size, uint64_t expiry) {
-  entry_header_t *entry_header = (entry_header_t *)(queue->buffer + queue->write_index);
+entry_header_t *memory_queue_put(uint16_t key_size, uint32_t value_size, uint64_t expiry) {
+  entry_header_t *entry_header = (entry_header_t *)(context.buffer + context.write_index);
   uint32_t total_size = sizeof(entry_header_t) + key_size + value_size;
 
-  if (total_size > queue->capacity_bytes) {
+  if (total_size > context.capacity_bytes) {
     return NULL;
   }
 
-  if (queue->write_index + total_size + sizeof(entry_header_t) >= queue->capacity_bytes) {
-    while (queue->write_index < queue->read_index) {
-      evict_entry(queue);
+  if (context.write_index + total_size + sizeof(entry_header_t) >= context.capacity_bytes) {
+    while (context.write_index < context.read_index) {
+      evict_entry();
     }
 
     entry_header->end_of_buffer = 1;
-    if (queue->read_index == queue->write_index) {
-      queue->read_index = 0;
+    if (context.read_index == context.write_index) {
+      context.read_index = 0;
     }
-    queue->write_index = 0;
+    context.write_index = 0;
 
-    entry_header = (entry_header_t *)queue->buffer;
+    entry_header = (entry_header_t *)context.buffer;
   }
 
-  while (queue->entry_count > 0
-      && queue->write_index <= queue->read_index
-      && queue->write_index + total_size + sizeof(entry_header_t) >= queue->read_index) {
-    evict_entry(queue);
+  while (context.entry_count > 0
+      && context.write_index <= context.read_index
+      && context.write_index + total_size + sizeof(entry_header_t) >= context.read_index) {
+    evict_entry();
   }
 
   entry_header->active = 1;
@@ -67,48 +72,62 @@ entry_header_t *memory_queue_put(memory_queue_t *queue, uint16_t key_size, uint3
   entry_header->value_size = value_size;
   entry_header->expiry = expiry;
 
-  queue->entry_count++;
-  queue->write_index += total_size;
-  queue->occupied_bytes += total_size;
+  context.entry_count++;
+  context.write_index += total_size;
+  context.occupied_bytes += total_size;
 
   return entry_header;
 }
 
-uint8_t memory_queue_expire(memory_queue_t *queue, uint64_t time) {
-  entry_header_t *entry_header = (entry_header_t *)(queue->buffer + queue->read_index);
+uint8_t memory_queue_expire(uint64_t time) {
+  entry_header_t *entry_header = (entry_header_t *)(context.buffer + context.read_index);
 
-  if (queue->entry_count
+  if (context.entry_count
       && entry_header->expiry <= time) {
-    remove_entry(queue, entry_header);
+    remove_entry(entry_header);
     return 1;
   }
 
   return 0;
 }
 
-static void evict_entry(memory_queue_t *queue) {
-  assert(queue->entry_count > 0);
+static void evict_entry() {
+  assert(context.entry_count > 0);
 
-  entry_header_t *entry_header = (entry_header_t *)(queue->buffer + queue->read_index);
-  remove_entry(queue, entry_header);
+  entry_header_t *entry_header = (entry_header_t *)(context.buffer + context.read_index);
+  remove_entry(entry_header);
 }
 
-static void remove_entry(memory_queue_t *queue, entry_header_t *entry_header) {
+static void remove_entry(entry_header_t *entry_header) {
   uint32_t total_size = sizeof(entry_header_t) + entry_header->key_size + entry_header->value_size;
 
-  if (entry_header->active) {
-    // TODO
-    // uint8_t *key_pointer = ((uint8_t *)entry_header) + sizeof(entry_header_t);
-    // hash_delete(key_pointer, entry_header->key_size);
-  }
+  context.entry_count--;
+  context.read_index += total_size;
+  context.occupied_bytes -= total_size;
 
-  queue->entry_count--;
-  queue->read_index += total_size;
-  queue->occupied_bytes -= total_size;
-
-  entry_header = (entry_header_t *)(queue->buffer + queue->read_index);
+  entry_header = (entry_header_t *)(context.buffer + context.read_index);
   if (entry_header->end_of_buffer) {
-    queue->read_index = 0;
+    context.read_index = 0;
   }
+}
+
+uint64_t memory_queue_get_entry_count(void) {
+  return context.entry_count;
+}
+
+uint64_t memory_queue_get_occupied_bytes(void) {
+  return context.occupied_bytes;
+}
+
+uint64_t memory_queue_get_capacity_bytes(void) {
+  return context.capacity_bytes;
+}
+
+uint64_t memory_queue_get_read_index(void) {
+  return context.read_index;
+}
+
+uint64_t memory_queue_get_write_index(void) {
+  return context.write_index;
 }
 

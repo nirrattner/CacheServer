@@ -3,20 +3,17 @@
 
 #include "entry_header.h"
 
-typedef struct {
-  void *buffer;
-  uint64_t entry_count;
-  uint64_t occupied_bytes;
-  uint64_t capacity_bytes;
-  uint64_t read_index;
-  uint64_t write_index;
-} memory_queue_t;
+uint8_t memory_queue_open(uint64_t capacity);
+void memory_queue_close();
 
-memory_queue_t *memory_queue_init(uint64_t capacity);
-void memory_queue_deinit(memory_queue_t *queue);
+entry_header_t *memory_queue_put(uint16_t key_size, uint32_t value_size, uint64_t expiry);
+uint8_t memory_queue_expire(uint64_t time);
 
-entry_header_t *memory_queue_put(memory_queue_t *queue, uint16_t key_size, uint32_t value_size, uint64_t expiry);
-uint8_t memory_queue_expire(memory_queue_t *queue, uint64_t time);
+uint64_t memory_queue_get_entry_count(void);
+uint64_t memory_queue_get_occupied_bytes(void);
+uint64_t memory_queue_get_capacity_bytes(void);
+uint64_t memory_queue_get_read_index(void);
+uint64_t memory_queue_get_write_index(void);
 
 #endif
 

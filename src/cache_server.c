@@ -11,6 +11,7 @@
 #include <unistd.h>
 
 #include "cache_server.h"
+#include "memory_queue.h"
 
 #define CONNECTION_BACKLOG_LIMIT (32)
 
@@ -30,10 +31,11 @@ cache_server_t *cache_server_init(
     return NULL;
   }
 
+  // TODO: Check result
+  memory_queue_open(capacity_bytes);
+
   cache_server->hash_map = entry_hash_map_init();
-  cache_server->memory_queue = memory_queue_init(capacity_bytes);
-  if (cache_server->hash_map == NULL
-      || cache_server->memory_queue == NULL) {
+  if (cache_server->hash_map == NULL) {
     cache_server_deinit(cache_server);
     printf("ERROR: Unable to allocate server fields\n");
     return NULL;
@@ -95,9 +97,7 @@ void cache_server_deinit(cache_server_t *cache_server) {
   if (cache_server->hash_map != NULL) {
     entry_hash_map_deinit(cache_server->hash_map);
   }
-  if (cache_server->memory_queue != NULL) {
-    memory_queue_deinit(cache_server->memory_queue);
-  }
+  memory_queue_close();
   // TODO: Free connections
   free(cache_server);
 }
