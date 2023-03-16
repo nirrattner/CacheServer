@@ -8,13 +8,15 @@
 
 typedef enum {
   CONNECTION_RESULT__SUCCESS = 0,
-  CONNECTION_RESULT__FAILURE,
+  CONNECTION_RESULT__NO_TRANSFER,
+  CONNECTION_RESULT__NEW_REQUEST,
+  CONNECTION_RESULT__DISCONNECT,
 } connection_result_t;
 
 typedef enum {
-  CONNECTION_STATE__AWAITING_HEADER = 0,
-  CONNECTION_STATE__AWAITING_ARGUMENTS,
-  CONNECTION_STATE__AWAITING_BODY,
+  CONNECTION_STATE__RECEIVING_HEADER = 0,
+  CONNECTION_STATE__RECEIVING_ARGUMENTS,
+  CONNECTION_STATE__RECEIVING_BODY,
   CONNECTION_STATE__SENDING_HEADER,
   CONNECTION_STATE__SENDING_ARGUMENTS,
   CONNECTION_STATE__SENDING_BODY,
@@ -26,9 +28,16 @@ typedef enum {
   TRANSFER_TYPE__SEND,
 } transfer_type_t;
 
+typedef enum {
+  CONNECTION_FLAG__NONE = 0,
+  CONNECTION_FLAG__KEEP_ALIVE = (1 << 0),
+  CONNECTION_FLAG__ALLOCATED_BUFFER = (1 << 1),
+} connection_flag_t;
+
 typedef union {
   key_arguments_t key;
   key_value_arguments_t key_value;
+  value_arguments_t value;
 } request_arguments_t;
 
 typedef struct connection {
@@ -45,6 +54,7 @@ typedef struct connection {
   request_arguments_t arguments;
   response_type_t response_type;
   transfer_type_t transfer_type;
+  connection_flag_t flags;
 } connection_t;
 
 connection_t *connection_init(int file_descriptor);

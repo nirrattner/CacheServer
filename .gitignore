@@ -1,6 +1,6 @@
 *.o
 *.swp
+.DS_Store
 bin/
 tags
-.DS_Store
 
