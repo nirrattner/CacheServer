@@ -168,7 +168,10 @@ void connection_set_next(connection_t *connection, connection_t *next) {
 }
 
 static void event_received_header(connection_t *connection) {
-  // TODO: Verify version?
+  if (connection->header.version != CACHE_PROTOCOL_VERSION) {
+      send_header(connection, RESPONSE_TYPE__UNSUPPORTED_VERSION);
+      return;
+  }
 
   if (connection->header.flags & REQUEST_FLAG__KEEP_ALIVE) {
     connection->flags |= CONNECTION_FLAG__KEEP_ALIVE;

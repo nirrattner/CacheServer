@@ -10,19 +10,19 @@
 #include <unistd.h>
 
 #include "cache_server.h"
+#include "configuration.h"
 #include "connection_list.h"
 #include "entry_hash_map.h"
 #include "memory_queue.h"
 #include "time_util.h"
 
 #define CONNECTION_BACKLOG_LIMIT (32)
-#define ACCEPT_PERIOD_MICROS (500)
+#define ACCEPT_PERIOD_MICROS (1000)
 
 typedef struct {
   connection_t *current_connection;
   uint64_t last_accept_timestamp;
   int listen_file_descriptor;
-  uint16_t active_connection_limit;
 } cache_server_context_t;
 
 static cache_server_context_t context;
@@ -30,17 +30,20 @@ static cache_server_context_t context;
 static uint8_t accept_connection(void);
 static connection_t *get_next_connection(void);
 
-uint8_t cache_server_open(
-    uint64_t capacity_bytes,
-    uint16_t connection_limit,
-    const char *listen_ip_address,
-    uint16_t listen_port) {
+uint8_t cache_server_open(void) {
   int result;
   struct sockaddr_in server_listen_address;
 
+  uint64_t entry_capacity_bytes = configuration_get_int(CONFIGURATION_TYPE__ENTRY_CAPACITY_BYTES);
+  const char *ip_address = configuration_get_string(CONFIGURATION_TYPE__IP_ADDRESS);
+  uint16_t port = configuration_get_int(CONFIGURATION_TYPE__PORT);
+
+  // TODO?
+  // uint16_t active_connection_limit = configuration_get_int(CONFIGURATION_TYPE__CONNECTION_ACTIVE_LIMIT);
+
   result = connection_list_open()
       || entry_hash_map_open()
-      || memory_queue_open(capacity_bytes);
+      || memory_queue_open(entry_capacity_bytes);
   if (result == 1) {
     cache_server_close();
     printf("ERROR: Unable to allocate server fields\n");
@@ -69,8 +72,8 @@ uint8_t cache_server_open(
   }
 
   server_listen_address.sin_family = AF_INET;
-  server_listen_address.sin_addr.s_addr = inet_addr(listen_ip_address);
-  server_listen_address.sin_port = htons(listen_port);
+  server_listen_address.sin_addr.s_addr = inet_addr(ip_address);
+  server_listen_address.sin_port = htons(port);
 
   result = bind(
       context.listen_file_descriptor,
@@ -91,11 +94,10 @@ uint8_t cache_server_open(
     return 1;
   }
 
-  context.active_connection_limit = connection_limit;
   context.current_connection = NULL;
   context.last_accept_timestamp = 0;
 
-  printf("Starting server on %s:%d...\n", listen_ip_address, listen_port);
+  printf("Starting server on %s:%d...\n", ip_address, port);
 
   return 0;
 }

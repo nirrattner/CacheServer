@@ -40,7 +40,7 @@ def put(connection_socket, key, value, flags=0):
   if response_header[0] == PROTOCOL.enum('response_type', 'ok'):
     print('put successful')
   else:
-    print(f'ERROR: put failed ({result.hex()})')
+    print(f'ERROR: put failed ({response_header.hex()})')
 
 def get(connection_socket, key, flags=0):
   request_header = PROTOCOL.allocate('request_header')
