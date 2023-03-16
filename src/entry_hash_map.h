@@ -9,7 +9,7 @@ uint8_t entry_hash_map_open(void);
 void entry_hash_map_close(void);
 
 entry_header_t *entry_hash_map_get(entry_header_t *key_header);
-void entry_hash_map_put(entry_header_t *entry_header);
+uint8_t entry_hash_map_put(entry_header_t *entry_header);
 void entry_hash_map_delete(entry_header_t *key_header);
 
 #endif

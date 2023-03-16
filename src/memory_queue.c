@@ -2,6 +2,7 @@
 #include <stdint.h>
 #include <stdlib.h>
 
+#include "entry_hash_map.h"
 #include "memory_queue.h"
 
 typedef struct {
@@ -67,7 +68,7 @@ entry_header_t *memory_queue_put(uint16_t key_size, uint32_t value_size, uint64_
     evict_entry();
   }
 
-  entry_header->active = 1;
+  entry_header->active = 0;
   entry_header->end_of_buffer = 0;
   entry_header->key_size = key_size;
   entry_header->value_size = value_size;
@@ -105,6 +106,11 @@ static void remove_entry(entry_header_t *entry_header) {
   context.entry_count--;
   context.read_index += total_size;
   context.occupied_bytes -= total_size;
+
+  // TODO: Remove from hash (if active?
+  if (entry_header->active) {
+    entry_hash_map_delete(entry_header);
+  }
 
   entry_header = (entry_header_t *)(context.buffer + context.read_index);
   if (entry_header->end_of_buffer) {

@@ -65,9 +65,12 @@ static void it_deletes(void) {
   uint8_t result = entry_hash_map_open();
   assert(result == 0);
 
-  entry_hash_map_put(entry_header);
+  result = entry_hash_map_put(entry_header);
+  assert(result == 0);
+  assert(entry_header->active == 1);
 
   entry_hash_map_delete(entry_key);
+  assert(entry_header->active == 0);
 
   entry_header_t *entry_header_get = entry_hash_map_get(entry_key);
 
@@ -89,9 +92,12 @@ static void it_puts_multiple_and_gets(void) {
   uint8_t result = entry_hash_map_open();
   assert(result == 0);
 
-  entry_hash_map_put(entry_header_1);
-  entry_hash_map_put(entry_header_2);
-  entry_hash_map_put(entry_header_3);
+  result = entry_hash_map_put(entry_header_1);
+  assert(result == 0);
+  result = entry_hash_map_put(entry_header_2);
+  assert(result == 0);
+  result = entry_hash_map_put(entry_header_3);
+  assert(result == 0);
 
   entry_header_t *entry_header_get = entry_hash_map_get(entry_key);
 
@@ -110,23 +116,31 @@ static void it_puts_multiple_deletes_and_gets(void) {
   entry_header_t *entry_header_1 = generate_entry("key-1", "value-1");
   entry_header_t *entry_header_2 = generate_entry("key-2", "value-1");
   entry_header_t *entry_header_3 = generate_entry("key-3", "value-1");
-  entry_header_t *entry_key = generate_entry("key-2", "");
+  entry_header_t *entry_key_1 = generate_entry("key-1", "");
+  entry_header_t *entry_key_2 = generate_entry("key-2", "");
 
   uint8_t result = entry_hash_map_open();
   assert(result == 0);
 
-  entry_hash_map_put(entry_header_1);
-  entry_hash_map_put(entry_header_2);
-  entry_hash_map_put(entry_header_3);
+  result = entry_hash_map_put(entry_header_1);
+  assert(result == 0);
+  result = entry_hash_map_put(entry_header_2);
+  assert(result == 0);
+  result = entry_hash_map_put(entry_header_3);
+  assert(result == 0);
 
-  entry_header_t *entry_header_get = entry_hash_map_get(entry_key);
+  entry_hash_map_delete(entry_key_1);
+  assert(entry_header_1->active == 0);
+
+  entry_header_t *entry_header_get = entry_hash_map_get(entry_key_2);
 
   assert(entry_header_get == entry_header_2);
 
   free(entry_header_1);
   free(entry_header_2);
   free(entry_header_3);
-  free(entry_key);
+  free(entry_key_1);
+  free(entry_key_2);
   entry_hash_map_close();
 }
 
@@ -141,11 +155,15 @@ static void it_puts_multiple_deletes_and_gets_empty(void) {
   uint8_t result = entry_hash_map_open();
   assert(result == 0);
 
-  entry_hash_map_put(entry_header_1);
-  entry_hash_map_put(entry_header_2);
-  entry_hash_map_put(entry_header_3);
+  result = entry_hash_map_put(entry_header_1);
+  assert(result == 0);
+  result = entry_hash_map_put(entry_header_2);
+  assert(result == 0);
+  result = entry_hash_map_put(entry_header_3);
+  assert(result == 0);
 
   entry_hash_map_delete(entry_key);
+  assert(entry_header_2->active == 0);
 
   entry_header_t *entry_header_get = entry_hash_map_get(entry_key);
 
@@ -171,10 +189,37 @@ static entry_header_t *generate_entry(const char *key, const char *value) {
   entry_header_t *entry_header = (entry_header_t *)buffer;
   entry_header->key_size = key_size;
   entry_header->value_size = value_size;
+  entry_header->active = 1;
   memcpy(buffer + sizeof(entry_header_t), (void *)key, key_size);
   memcpy(buffer + sizeof(entry_header_t) + key_size, (void *)value, value_size);
 
   return entry_header;
+}
+
+static void it_puts_same_key_twice(void) {
+  PRINT_TEST()
+
+  entry_header_t *entry_value_1 = generate_entry("key", "value-1");
+  entry_header_t *entry_value_2 = generate_entry("key", "value-2");
+  entry_header_t *entry_key = generate_entry("key", "");
+
+  uint8_t result = entry_hash_map_open();
+  assert(result == 0);
+
+  entry_hash_map_put(entry_value_1);
+  assert(entry_value_1->active == 1);
+
+  entry_hash_map_put(entry_value_2);
+  assert(entry_value_1->active == 0);
+
+  entry_header_t *entry_header_get = entry_hash_map_get(entry_key);
+
+  assert(entry_header_get == entry_value_2);
+
+  free(entry_value_1);
+  free(entry_value_2);
+  free(entry_key);
+  entry_hash_map_close();
 }
 
 int main() {

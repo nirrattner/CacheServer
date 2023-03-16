@@ -190,6 +190,7 @@ static void event_awaiting_body(connection_t *connection) {
         return;
       }
 
+      // TODO: Check expiry
       send_header(connection, RESPONSE_TYPE__VALUE);
       break;
 
@@ -234,7 +235,7 @@ static void init_request(connection_t *connection) {
 }
 
 static void send_header(connection_t *connection, response_type_t type) {
-  connection->response_type = type; 
+  connection->response_type = type;
   connection->buffer = &connection->response_type;
   connection->remaining_bytes = sizeof(response_type_t);
   connection->buffer_index = 0;

@@ -28,7 +28,7 @@ uint8_t entry_hash_map_open(void) {
       entry_compare,
       NULL,
       NULL);
-  
+
   if (context.hashmap == NULL) {
     return 1;
   }
@@ -53,17 +53,27 @@ entry_header_t *entry_hash_map_get(entry_header_t *key_header) {
   return *header_pointer;
 }
 
-// TODO: Check OOM
-void entry_hash_map_put(entry_header_t *entry_header) {
-  hashmap_set(
+uint8_t entry_hash_map_put(entry_header_t *entry_header) {
+  entry_header_t **previous_entry = (entry_header_t **)hashmap_set(
       context.hashmap,
       &entry_header);
+
+  if (previous_entry != NULL) {
+    (*previous_entry)->active = 0;
+    return 0;
+  }
+
+  return hashmap_oom(context.hashmap);
 }
 
 void entry_hash_map_delete(entry_header_t *key_header) {
-  hashmap_delete(
+  entry_header_t **previous_entry = (entry_header_t **)hashmap_delete(
       context.hashmap,
       &key_header);
+
+  if (previous_entry != NULL) {
+    (*previous_entry)->active = 0;
+  }
 }
 
 static int entry_compare(const void *pointer_1, const void *pointer_2, void *udata) {
@@ -83,9 +93,9 @@ static int entry_compare(const void *pointer_1, const void *pointer_2, void *uda
 static uint64_t entry_hash(const void *pointer, uint64_t seed0, uint64_t seed1) {
   entry_header_t *entry_header = *((entry_header_t **)pointer);
   return hashmap_sip(
-      entry_header + sizeof(entry_header_t), 
-      entry_header->key_size, 
-      seed0, 
+      entry_header + sizeof(entry_header_t),
+      entry_header->key_size,
+      seed0,
       seed1);
 }
 
