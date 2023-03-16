@@ -8,7 +8,7 @@ import struct
 import time
 
 CURRENT_DIRECTORY = os.path.dirname(os.path.realpath(__file__))
-INPUT_HEADER_FILE = CURRENT_DIRECTORY + '/../src/cache_communication_protocol.h'
+INPUT_HEADER_FILE = CURRENT_DIRECTORY + '/../src/cache_protocol.h'
 
 START_PATTERN = re.compile('(typedef enum|typedef struct) {')
 END_PATTERN = re.compile('} (.*)_t;')

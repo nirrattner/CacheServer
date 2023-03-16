@@ -3,7 +3,7 @@
 
 #include <stdint.h>
 
-#include "cache_communication_protocol.h"
+#include "cache_protocol.h"
 #include "entry_header.h"
 
 typedef enum {
