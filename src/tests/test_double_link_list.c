@@ -4,16 +4,14 @@
 #include <stdlib.h>
 
 #include "double_link_list.h"
-
-#define PRINT_TEST() printf("TEST %s\n", __FUNCTION__);
-#define DEBUG_LINE() printf("[%d]\n", __LINE__);
+#include "test_util.h"
 
 static double_link_list_node_t *generate_int_node(int value);
 static void assert_values(double_link_list_t *list, size_t expected_size, ...);
 
 // TODO: Clean up memory leaks of allocating nodes and values
 
-void it_appends_nodes() {
+static void it_appends_nodes(void) {
   PRINT_TEST()
 
   double_link_list_t list;
@@ -28,7 +26,7 @@ void it_appends_nodes() {
   assert_values(&list, 5, 11, 12, 13, 14, 15);
 }
 
-void it_removes_head_node() {
+static void it_removes_head_node(void) {
   PRINT_TEST()
 
   double_link_list_t list;
@@ -47,7 +45,7 @@ void it_removes_head_node() {
   assert_values(&list, 4, 12, 13, 14, 15);
 }
 
-void it_removes_middle_node() {
+static void it_removes_middle_node(void) {
   PRINT_TEST()
 
   double_link_list_t list;
@@ -66,7 +64,7 @@ void it_removes_middle_node() {
   assert_values(&list, 4, 11, 12, 14, 15);
 }
 
-void it_removes_tail_node() {
+static void it_removes_tail_node(void) {
   PRINT_TEST()
 
   double_link_list_t list;
@@ -85,7 +83,7 @@ void it_removes_tail_node() {
   assert_values(&list, 4, 11, 12, 13, 14);
 }
 
-void it_pops_front() {
+static void it_pops_front(void) {
   PRINT_TEST()
 
   double_link_list_t list;
