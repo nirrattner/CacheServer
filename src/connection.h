@@ -5,9 +5,11 @@ typedef enum {
   CONNECTION_STATE__AWAITING_COMMAND = 0,
 } connection_state_t;
 
-typedef struct {
-  connection_state_t state;
+typedef struct connection {
+  struct connection *previous;
+  struct connection *next;
   int file_descriptor;
+  connection_state_t state;
 } connection_t;
 
 connection_t *connection_init(int file_descriptor);

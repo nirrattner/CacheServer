@@ -9,6 +9,8 @@ connection_t *connection_init(int file_descriptor) {
     return NULL;
   }
 
+  connection->previous = NULL;
+  connection->next = NULL;
   connection->state = CONNECTION_STATE__AWAITING_COMMAND;
   connection->file_descriptor = file_descriptor;
   return connection;

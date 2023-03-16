@@ -17,8 +17,9 @@
 #define CONNECTION_BACKLOG_LIMIT (32)
 
 typedef struct {
-  connection_t *current_connection;
   connection_t *head_connection;
+  connection_t *tail_connection;
+  connection_t *current_connection;
   int listen_file_descriptor;
   uint16_t active_connection_limit;
   uint16_t connection_count;
