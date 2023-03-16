@@ -16,9 +16,19 @@
 
 #define CONNECTION_BACKLOG_LIMIT (32)
 
-static uint8_t accept_connection(cache_server_t *cache_server);
+typedef struct {
+  connection_t *current_connection;
+  connection_t *head_connection;
+  int listen_file_descriptor;
+  uint16_t active_connection_limit;
+  uint16_t connection_count;
+} cache_server_context_t;
 
-cache_server_t *cache_server_init(
+static cache_server_context_t context;
+
+static uint8_t accept_connection(void);
+
+uint8_t cache_server_open(
     uint64_t capacity_bytes,
     uint16_t connection_limit,
     const char *listen_ip_address,
@@ -26,39 +36,33 @@ cache_server_t *cache_server_init(
   int result;
   struct sockaddr_in server_listen_address;
 
-  cache_server_t *cache_server = (cache_server_t *)malloc(sizeof(cache_server_t));
-  if (cache_server == NULL) {
-    printf("ERROR: Unable to allocate server\n");
-    return NULL;
-  }
-
   result = entry_hash_map_open()
       || memory_queue_open(capacity_bytes);
   if (result == 1) {
-    cache_server_deinit(cache_server);
+    cache_server_close();
     printf("ERROR: Unable to allocate server fields\n");
-    return NULL;
+    return 1;
   }
 
-  cache_server->listen_file_descriptor = socket(AF_INET, SOCK_STREAM, 0);
-  if (cache_server->listen_file_descriptor == -1) {
-    cache_server_deinit(cache_server);
+  context.listen_file_descriptor = socket(AF_INET, SOCK_STREAM, 0);
+  if (context.listen_file_descriptor == -1) {
+    cache_server_close();
     printf("ERROR: Unable to allocate socket -- %s\n", strerror(errno));
-    return NULL;
+    return 1;
   }
 
-  result = fcntl(cache_server->listen_file_descriptor, F_GETFL);
+  result = fcntl(context.listen_file_descriptor, F_GETFL);
   if (result == -1) {
-    cache_server_deinit(cache_server);
+    cache_server_close();
     printf("ERROR: Unable to get flags -- %s\n", strerror(errno));
-    return NULL;
+    return 1;
   }
 
-  result = fcntl(cache_server->listen_file_descriptor, F_SETFL, result | O_NONBLOCK);
+  result = fcntl(context.listen_file_descriptor, F_SETFL, result | O_NONBLOCK);
   if (result == -1) {
-    cache_server_deinit(cache_server);
+    cache_server_close();
     printf("ERROR: Unable to get flags -- %s\n", strerror(errno));
-    return NULL;
+    return 1;
   }
 
   server_listen_address.sin_family = AF_INET;
@@ -66,49 +70,48 @@ cache_server_t *cache_server_init(
   server_listen_address.sin_port = htons(listen_port);
 
   result = bind(
-      cache_server->listen_file_descriptor, 
+      context.listen_file_descriptor, 
       (struct sockaddr*)&server_listen_address, 
       sizeof(struct sockaddr_in));
   if (result == -1) {
-    cache_server_deinit(cache_server);
+    cache_server_close();
     printf("ERROR: Unable to bind socket -- %s\n", strerror(errno));
-    return NULL;
+    return 1;
   }
 
   result = listen(
-      cache_server->listen_file_descriptor, 
+      context.listen_file_descriptor, 
       CONNECTION_BACKLOG_LIMIT);
   if (result == -1) {
-    cache_server_deinit(cache_server);
+    cache_server_close();
     printf("ERROR: Unable to listen socket -- %s\n", strerror(errno));
-    return NULL;
+    return 1;
   }
 
-  cache_server->active_connection_limit = connection_limit;
-  cache_server->connection_count = 0;
+  context.active_connection_limit = connection_limit;
+  context.connection_count = 0;
 
   printf("Starting server on %s:%d...\n", listen_ip_address, listen_port);
 
-  return cache_server;
+  return 0;
 }
 
-void cache_server_deinit(cache_server_t *cache_server) {
+void cache_server_close(void) {
   entry_hash_map_close();
   memory_queue_close();
   // TODO: Free connections
-  free(cache_server);
 }
 
-uint8_t cache_server_proc(cache_server_t *cache_server) {
-  if (cache_server->connection_count == 0) {
-    // accept_connection(cache_server);
+uint8_t cache_server_proc(void) {
+  if (context.connection_count == 0) {
+    accept_connection();
   }
 
   return 0;
 }
 
-static uint8_t accept_connection(cache_server_t *cache_server) {
-  int client_file_descriptor = accept(cache_server->listen_file_descriptor, NULL, NULL);
+static uint8_t accept_connection(void) {
+  int client_file_descriptor = accept(context.listen_file_descriptor, NULL, NULL);
   if (client_file_descriptor == -1) {
     if (errno != EWOULDBLOCK && errno != EAGAIN) {
       printf("ERROR: Failed to accept -- %s\n", strerror(errno));

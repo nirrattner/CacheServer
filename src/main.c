@@ -9,14 +9,19 @@
 #define LISTEN_PORT (8888)
 
 int main() {
-  cache_server_t *server = cache_server_init(
+  uint8_t result = cache_server_open(
       CAPACITY_BYTES,
       ACTIVE_CONNECTION_LIMIT,
       LISTEN_IP_ADDRESS,
       LISTEN_PORT);
 
+  if (result == 1) {
+    printf("Failed to open server\n");
+    return 1;
+  }
+
   while (1) {
-    cache_server_proc(server);
+    cache_server_proc();
     sleep(1);
     printf(".\n");
   }
