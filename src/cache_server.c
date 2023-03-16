@@ -7,22 +7,22 @@
 #include <string.h>
 #include <sys/socket.h>
 #include <sys/types.h>
-#include <time.h>
 #include <unistd.h>
 
 #include "cache_server.h"
+#include "connection_list.h"
 #include "entry_hash_map.h"
 #include "memory_queue.h"
+#include "time_util.h"
 
 #define CONNECTION_BACKLOG_LIMIT (32)
+#define ACCEPT_PERIOD_MICROS (500)
 
 typedef struct {
-  connection_t *head_connection;
-  connection_t *tail_connection;
   connection_t *current_connection;
+  uint64_t last_accept_timestamp;
   int listen_file_descriptor;
   uint16_t active_connection_limit;
-  uint16_t connection_count;
 } cache_server_context_t;
 
 static cache_server_context_t context;
@@ -37,7 +37,8 @@ uint8_t cache_server_open(
   int result;
   struct sockaddr_in server_listen_address;
 
-  result = entry_hash_map_open()
+  result = connection_list_open()
+      || entry_hash_map_open()
       || memory_queue_open(capacity_bytes);
   if (result == 1) {
     cache_server_close();
@@ -62,7 +63,7 @@ uint8_t cache_server_open(
   result = fcntl(context.listen_file_descriptor, F_SETFL, result | O_NONBLOCK);
   if (result == -1) {
     cache_server_close();
-    printf("ERROR: Unable to get flags -- %s\n", strerror(errno));
+    printf("ERROR: Unable to set flags -- %s\n", strerror(errno));
     return 1;
   }
 
@@ -90,7 +91,8 @@ uint8_t cache_server_open(
   }
 
   context.active_connection_limit = connection_limit;
-  context.connection_count = 0;
+  context.current_connection = NULL;
+  context.last_accept_timestamp = 0;
 
   printf("Starting server on %s:%d...\n", listen_ip_address, listen_port);
 
@@ -98,20 +100,24 @@ uint8_t cache_server_open(
 }
 
 void cache_server_close(void) {
+  connection_list_close();
   entry_hash_map_close();
   memory_queue_close();
-  // TODO: Free connections
 }
 
 uint8_t cache_server_proc(void) {
-  if (context.connection_count == 0) {
-    accept_connection();
+  if (context.current_connection == NULL
+      || time_get_timestamp() - context.last_accept_timestamp > ACCEPT_PERIOD_MICROS) {
+    return accept_connection();
   }
 
-  return 0;
+  // TODO: Change current connection as needed
+  return connection_proc(context.current_connection);
 }
 
 static uint8_t accept_connection(void) {
+  context.last_accept_timestamp = time_get_timestamp();
+
   int client_file_descriptor = accept(context.listen_file_descriptor, NULL, NULL);
   if (client_file_descriptor == -1) {
     if (errno != EWOULDBLOCK && errno != EAGAIN) {
@@ -127,6 +133,12 @@ static uint8_t accept_connection(void) {
     return 1;
   }
 
+  connection_list_append(connection);
+  if (context.current_connection == NULL) {
+    context.current_connection = connection;
+  }
+
+  // TODO: Remove
   printf("Connected!\n");
 
   return 0;
