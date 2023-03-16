@@ -22,8 +22,6 @@ int main() {
 
   while (1) {
     cache_server_proc();
-    sleep(1);
-    printf(".\n");
   }
 }
 

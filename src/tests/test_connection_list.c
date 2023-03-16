@@ -35,6 +35,7 @@ void it_appends_and_gets(void) {
   assert(connection_list_get_tail() == connection);
   assert_values(expected_values, 1);
 
+  free(connection);
   connection_list_close();
 }
 
@@ -56,6 +57,9 @@ void it_appends_and_gets_multiple(void) {
   assert(connection_list_get_tail() == connection_3);
   assert_values(expected_values, 3);
 
+  free(connection_1);
+  free(connection_2);
+  free(connection_3);
   connection_list_close();
 }
 
@@ -79,6 +83,9 @@ void it_appends_and_deletes_head(void) {
   assert(connection_list_get_tail() == connection_3);
   assert_values(expected_values, 2);
 
+  free(connection_1);
+  free(connection_2);
+  free(connection_3);
   connection_list_close();
 }
 
@@ -102,6 +109,9 @@ void it_appends_and_deletes_middle(void) {
   assert(connection_list_get_tail() == connection_3);
   assert_values(expected_values, 2);
 
+  free(connection_1);
+  free(connection_2);
+  free(connection_3);
   connection_list_close();
 }
 
@@ -125,6 +135,9 @@ void it_appends_and_deletes_tail(void) {
   assert(connection_list_get_tail() == connection_2);
   assert_values(expected_values, 2);
 
+  free(connection_1);
+  free(connection_2);
+  free(connection_3);
   connection_list_close();
 }
 
@@ -149,6 +162,9 @@ void it_appends_and_deletes_multiple(void) {
   assert(connection_list_get_tail() == connection_2);
   assert_values(expected_values, 1);
 
+  free(connection_1);
+  free(connection_2);
+  free(connection_3);
   connection_list_close();
 }
 
@@ -173,6 +189,9 @@ void it_deletes_all_and_appends(void) {
   assert(connection_list_get_tail() == connection_3);
   assert_values(expected_values, 1);
 
+  free(connection_1);
+  free(connection_2);
+  free(connection_3);
   connection_list_close();
 }
 
@@ -190,11 +209,11 @@ static void assert_values(int *values, uint16_t value_count) {
 
   for (index = 0; index < value_count; index++) {
     assert(values[index] == current_connection->file_descriptor);
-    next_connection = current_connection->next;
+    next_connection = connection_get_next(current_connection);
     if (index == value_count - 1) {
       assert(next_connection == NULL);
     } else {
-      assert(next_connection->previous == current_connection);
+      assert(connection_get_previous(next_connection) == current_connection);
     }
     current_connection = next_connection;
   }

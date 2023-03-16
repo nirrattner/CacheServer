@@ -24,7 +24,7 @@ void connection_list_close(void) {
   connection_t *next_connection;
 
   while (current_connection) {
-    next_connection = current_connection->next;
+    next_connection = connection_get_next(current_connection);
     connection_deinit(current_connection);
     current_connection = next_connection;
   }
@@ -39,8 +39,8 @@ void connection_list_append(connection_t *connection) {
     return;
   }
 
-  connection->previous = context.tail;
-  context.tail->next = connection;
+  connection_set_previous(connection, context.tail);
+  connection_set_next(context.tail, connection);
   context.tail = connection;
 }
 
@@ -48,20 +48,22 @@ void connection_list_remove(connection_t *connection) {
   context.count--;
 
   if (connection == context.tail) {
-    assert(connection->next == NULL);
-    context.tail = connection->previous;
+    assert(connection_get_next(connection) == NULL);
+    context.tail = connection_get_previous(connection);
   } else {
-    connection->next->previous = connection->previous;
+    connection_set_previous(
+        connection_get_next(connection),
+        connection_get_previous(connection));
   }
 
   if (connection == context.head) {
-    assert(connection->previous == NULL);
-    context.head = connection->next;
+    assert(connection_get_previous(connection) == NULL);
+    context.head = connection_get_next(connection);
   } else {
-    connection->previous->next = connection->next;
+    connection_set_next(
+        connection_get_previous(connection), 
+        connection_get_next(connection));
   }
-
-  connection_deinit(connection);
 }
 
 connection_t *connection_list_get_head(void) {

@@ -28,6 +28,7 @@ typedef struct {
 static cache_server_context_t context;
 
 static uint8_t accept_connection(void);
+static connection_t *get_next_connection(void);
 
 uint8_t cache_server_open(
     uint64_t capacity_bytes,
@@ -72,8 +73,8 @@ uint8_t cache_server_open(
   server_listen_address.sin_port = htons(listen_port);
 
   result = bind(
-      context.listen_file_descriptor, 
-      (struct sockaddr*)&server_listen_address, 
+      context.listen_file_descriptor,
+      (struct sockaddr*)&server_listen_address,
       sizeof(struct sockaddr_in));
   if (result == -1) {
     cache_server_close();
@@ -82,7 +83,7 @@ uint8_t cache_server_open(
   }
 
   result = listen(
-      context.listen_file_descriptor, 
+      context.listen_file_descriptor,
       CONNECTION_BACKLOG_LIMIT);
   if (result == -1) {
     cache_server_close();
@@ -105,14 +106,39 @@ void cache_server_close(void) {
   memory_queue_close();
 }
 
-uint8_t cache_server_proc(void) {
+void cache_server_proc(void) {
   if (context.current_connection == NULL
       || time_get_timestamp() - context.last_accept_timestamp > ACCEPT_PERIOD_MICROS) {
-    return accept_connection();
+    accept_connection();
+    return;
   }
 
-  // TODO: Change current connection as needed
-  return connection_proc(context.current_connection);
+  connection_t *next_connection = get_next_connection();
+
+  connection_result_t result = connection_proc(context.current_connection);
+  switch (result) {
+    case CONNECTION_RESULT__SUCCESS:
+      // TODO: Revise strategy?
+      context.current_connection = connection_list_get_head();
+      break;
+
+    case CONNECTION_RESULT__NO_TRANSFER:
+      context.current_connection = next_connection;
+      break;
+
+    case CONNECTION_RESULT__NEW_REQUEST:
+      connection_list_remove(context.current_connection);
+      connection_list_append(context.current_connection);
+      context.current_connection = next_connection;
+      break;
+
+    case CONNECTION_RESULT__DISCONNECT:
+      connection_list_remove(context.current_connection);
+      connection_close(context.current_connection);
+      connection_deinit(context.current_connection);
+      context.current_connection = next_connection;
+      break;
+  }
 }
 
 static uint8_t accept_connection(void) {
@@ -129,6 +155,7 @@ static uint8_t accept_connection(void) {
 
   connection_t *connection = connection_init(client_file_descriptor);
   if (connection == NULL) {
+    // TODO: Crash server?
     printf("ERROR: Unable to allocate connection\n");
     return 1;
   }
@@ -142,5 +169,17 @@ static uint8_t accept_connection(void) {
   printf("Connected!\n");
 
   return 0;
+}
+
+static connection_t *get_next_connection(void) {
+  // TODO: Logic to reset to head periodically?
+  // TODO: Logic to differentiate send vs receive states?
+  connection_t *next = connection_get_next(context.current_connection);
+  if (next != NULL) {
+    return next;
+  }
+
+  next = connection_list_get_head();
+  return next;
 }
 

@@ -1,6 +1,8 @@
 #ifndef _CACHE_COMMUNICATION_PROTOCOL_H
 #define _CACHE_COMMUNICATION_PROTOCOL_H
 
+#define CACHE_COMMUNICATION_PROTOCOL_VERSION (1)
+
 typedef enum {
   REQUEST_TYPE__NONE = 0,
   REQUEST_TYPE__GET,
@@ -34,7 +36,7 @@ typedef enum {
 typedef struct {
   uint32_t version;
   uint32_t flags;
-  request_type_t type;
+  uint8_t type;
 } request_header_t;
 
 typedef struct {

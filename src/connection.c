@@ -17,6 +17,50 @@
 // TODO: Set configurable expiry
 #define EXPIRY_US (3600000)
 
+typedef enum {
+  CONNECTION_STATE__RECEIVING_HEADER = 0,
+  CONNECTION_STATE__RECEIVING_ARGUMENTS,
+  CONNECTION_STATE__RECEIVING_BODY,
+  CONNECTION_STATE__SENDING_HEADER,
+  CONNECTION_STATE__SENDING_ARGUMENTS,
+  CONNECTION_STATE__SENDING_BODY,
+} connection_state_t;
+
+typedef enum {
+  TRANSFER_TYPE__NONE = 0,
+  TRANSFER_TYPE__RECEIVE,
+  TRANSFER_TYPE__SEND,
+} transfer_type_t;
+
+typedef enum {
+  CONNECTION_FLAG__NONE = 0,
+  CONNECTION_FLAG__KEEP_ALIVE = (1 << 0),
+  CONNECTION_FLAG__ALLOCATED_BUFFER = (1 << 1),
+} connection_flag_t;
+
+typedef union {
+  key_arguments_t key;
+  key_value_arguments_t key_value;
+  value_arguments_t value;
+} request_arguments_t;
+
+struct connection {
+  struct connection *previous;
+  struct connection *next;
+  void *buffer;
+  entry_header_t *entry_header;
+  uint32_t remaining_bytes;
+  uint32_t buffer_index;
+  uint64_t last_interaction_timestamp;
+  int file_descriptor;
+  connection_state_t state;
+  request_header_t header;
+  request_arguments_t arguments;
+  response_type_t response_type;
+  transfer_type_t transfer_type;
+  connection_flag_t flags;
+};
+
 static void event_received_header(connection_t *connection);
 static void event_received_arguments(connection_t *connection);
 static void event_received_body(connection_t *connection);
@@ -102,7 +146,25 @@ connection_result_t connection_proc(connection_t *connection) {
 }
 
 void connection_close(connection_t *connection) {
-  close(connection->file_descriptor);
+  if (connection->file_descriptor > 0) {
+    close(connection->file_descriptor);
+  }
+}
+
+connection_t *connection_get_previous(connection_t *connection) {
+  return connection->previous;
+}
+
+void connection_set_previous(connection_t *connection, connection_t *previous) {
+  connection->previous = previous;
+}
+
+connection_t *connection_get_next(connection_t *connection) {
+  return connection->next;
+}
+
+void connection_set_next(connection_t *connection, connection_t *next) {
+  connection->next = next;
 }
 
 static void event_received_header(connection_t *connection) {
@@ -294,6 +356,7 @@ static void init_request(connection_t *connection) {
   connection->flags = CONNECTION_FLAG__NONE;
 }
 
+// TODO: Cap individual transfer size?
 static connection_result_t connection_transfer(connection_t *connection) {
   int result;
   switch (connection->transfer_type) {

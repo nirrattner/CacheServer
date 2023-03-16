@@ -12,7 +12,7 @@ uint8_t cache_server_open(
     uint16_t listen_port);
 void cache_server_close(void);
 
-uint8_t cache_server_proc(void);
+void cache_server_proc(void);
 
 #endif
 
