@@ -13,13 +13,16 @@ INPUT_HEADER_FILE = CURRENT_DIRECTORY + '/../src/cache_communication_protocol.h'
 START_PATTERN = re.compile('(typedef enum|typedef struct) {')
 END_PATTERN = re.compile('} (.*)_t;')
 
+PACK_FORMAT = '<'
+
 class CacheProtocolStructInstance:
   def __init__(self, definition):
     self.definition = definition
-    buffer = b'\00' * definition['size']
-    self.fields = c2py.depack_bytearray_to_dict(buffer, self.definition['text'], '>')
+    self.size = definition['size']
+    buffer = b'\00' * self.size
+    self.fields = c2py.depack_bytearray_to_dict(buffer, self.definition['text'], PACK_FORMAT)
 
-  def pack(self, alignment='>'):
+  def pack(self):
     variables = []
     pack_format = self.definition['pack_format']
     variable_list = self.definition['variable_list']
@@ -42,7 +45,7 @@ class CacheProtocolStructInstance:
     return buffer
 
   def unpack(self, input_data):
-    self.fields = c2py.depack_bytearray_to_dict(input_data, self.definition['text'], '>')
+    self.fields = c2py.depack_bytearray_to_dict(input_data, self.definition['text'], PACK_FORMAT)
 
 class CacheProtocol:
   def __init__(self):
@@ -66,8 +69,8 @@ class CacheProtocol:
           name = result.group(1)
           text = '\n'.join(lines)
           if kind == 'struct':
-            size = c2py.structSize(text, '>')
-            variable_list, pack_format = c2py.structInfo(text, '>')
+            size = c2py.structSize(text, PACK_FORMAT)
+            variable_list, pack_format = c2py.structInfo(text, PACK_FORMAT)
           elif kind == 'enum':
             size = 0
             pack_format = None

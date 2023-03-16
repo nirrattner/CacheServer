@@ -12,7 +12,7 @@
 #include "memory_queue.h"
 #include "time_util.h"
 
-#define CONNECTION_TIMEOUT_US (5000)
+#define CONNECTION_TIMEOUT_US (15000)
 
 // TODO: Set configurable expiry
 #define EXPIRY_US (3600000)
@@ -95,7 +95,7 @@ connection_t *connection_init(int file_descriptor) {
   connection->previous = NULL;
   connection->next = NULL;
   connection->file_descriptor = file_descriptor;
-  connection->last_interaction_timestamp = 0;
+  connection->last_interaction_timestamp = time_get_timestamp();
   init_request(connection);
   return connection;
 }
@@ -169,6 +169,7 @@ void connection_set_next(connection_t *connection, connection_t *next) {
 
 static void event_received_header(connection_t *connection) {
   // TODO: Verify version?
+
   if (connection->header.flags & REQUEST_FLAG__KEEP_ALIVE) {
     connection->flags |= CONNECTION_FLAG__KEEP_ALIVE;
   }
@@ -201,10 +202,10 @@ static void event_received_header(connection_t *connection) {
 
 static void event_received_arguments(connection_t *connection) {
   // TODO: Validate arguments
+
   switch (connection->header.type) {
     case REQUEST_TYPE__GET:
     case REQUEST_TYPE__DELETE:
-      // TODO: free on failures
       connection->entry_header = (entry_header_t *)malloc(sizeof(entry_header_t)
           + connection->arguments.key.key_size);
 
@@ -213,6 +214,7 @@ static void event_received_arguments(connection_t *connection) {
         return;
       }
 
+      connection->entry_header->key_size = connection->arguments.key.key_size;
       connection->flags |= CONNECTION_FLAG__ALLOCATED_BUFFER;
       connection->buffer = (void *)connection->entry_header + sizeof(entry_header_t);
       connection->remaining_bytes = connection->arguments.key.key_size;
@@ -251,6 +253,10 @@ static void event_received_body(connection_t *connection) {
 
   switch (connection->header.type) {
     case REQUEST_TYPE__GET:
+      printf("GET[%.*s]\n", 
+          connection->entry_header->key_size,
+          (uint8_t *)connection->entry_header + sizeof(entry_header_t));
+
       header_result = entry_hash_map_get(connection->entry_header);
       free(connection->entry_header);
       connection->flags &= ~CONNECTION_FLAG__ALLOCATED_BUFFER;
@@ -265,6 +271,10 @@ static void event_received_body(connection_t *connection) {
       break;
 
     case REQUEST_TYPE__DELETE:
+      printf("DELETE[%.*s]\n", 
+          connection->entry_header->key_size,
+          (uint8_t *)connection->entry_header + sizeof(entry_header_t));
+
       entry_hash_map_delete(connection->entry_header);
       free(connection->entry_header);
       send_header(connection, RESPONSE_TYPE__OK);
@@ -272,6 +282,12 @@ static void event_received_body(connection_t *connection) {
 
     case REQUEST_TYPE__PUT:
       result = entry_hash_map_put(connection->entry_header);
+      printf("PUT[%.*s]: %.*s\n", 
+          connection->entry_header->key_size,
+          (uint8_t *)connection->entry_header + sizeof(entry_header_t),
+          connection->entry_header->value_size,
+          (uint8_t *)connection->entry_header + sizeof(entry_header_t) + connection->entry_header->key_size);
+
       if (result) {
         send_header(connection, RESPONSE_TYPE__OUT_OF_MEMORY);
         return;
@@ -382,12 +398,18 @@ static connection_result_t connection_transfer(connection_t *connection) {
       break;
   }
 
-  if (result == -1) {
-    if ((errno == EWOULDBLOCK || errno == EAGAIN)
+  if (result < 1) {
+    uint8_t no_transfer = result == 0 || errno == EWOULDBLOCK || errno == EAGAIN;
+    if (no_transfer
         && !(time_get_timestamp() - connection->last_interaction_timestamp > CONNECTION_TIMEOUT_US)) {
       return CONNECTION_RESULT__NO_TRANSFER;
     }
-    printf("Socket failure %s", strerror(errno));
+
+    if (no_transfer) {
+      printf("Socket timeout\n");
+    } else {
+      printf("Socket failure \"%s\"\n", strerror(errno));
+    }
 
     if (connection->flags & CONNECTION_FLAG__ALLOCATED_BUFFER) {
       free(connection->buffer);
@@ -404,7 +426,7 @@ static connection_result_t connection_transfer(connection_t *connection) {
 static void send_header(connection_t *connection, response_type_t type) {
   connection->response_type = type;
   connection->buffer = &connection->response_type;
-  connection->remaining_bytes = sizeof(response_type_t);
+  connection->remaining_bytes = 1;
   connection->buffer_index = 0;
   connection->state = CONNECTION_STATE__SENDING_HEADER;
   connection->transfer_type = TRANSFER_TYPE__SEND;

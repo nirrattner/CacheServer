@@ -114,7 +114,6 @@ void cache_server_proc(void) {
   }
 
   connection_t *next_connection = get_next_connection();
-
   connection_result_t result = connection_proc(context.current_connection);
   switch (result) {
     case CONNECTION_RESULT__SUCCESS:
@@ -136,7 +135,12 @@ void cache_server_proc(void) {
       connection_list_remove(context.current_connection);
       connection_close(context.current_connection);
       connection_deinit(context.current_connection);
-      context.current_connection = next_connection;
+
+      if (next_connection == context.current_connection) {
+        context.current_connection = NULL;
+      } else {
+        context.current_connection = next_connection;
+      }
       break;
   }
 }
