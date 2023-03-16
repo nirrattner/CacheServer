@@ -21,7 +21,6 @@ static void remove_entry(entry_header_t *entry_header);
 uint8_t memory_queue_open(uint64_t capacity_bytes) {
   context.buffer = malloc(capacity_bytes);
   if (context.buffer == NULL) {
-    memory_queue_close();
     return 1;
   }
 
@@ -34,8 +33,10 @@ uint8_t memory_queue_open(uint64_t capacity_bytes) {
   return 0;
 }
 
-void memory_queue_close() {
-  free(context.buffer);
+void memory_queue_close(void) {
+  if (context.buffer != NULL) {
+    free(context.buffer);
+  }
 }
 
 entry_header_t *memory_queue_put(uint16_t key_size, uint32_t value_size, uint64_t expiry) {

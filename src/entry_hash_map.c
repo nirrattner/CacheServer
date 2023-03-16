@@ -4,22 +4,23 @@
 #include <string.h>
 
 #include "entry_hash_map.h"
+#include "hashmap.h"
 
 #define INITIAL_CAPACITY (0)
 #define SEED_VALUE (0)
 
+typedef struct {
+  struct hashmap *hashmap;
+} entry_hash_map_context_t;
+
+static entry_hash_map_context_t context;
+
 static int entry_compare(const void *entry_1, const void *entry_2, void *udata);
 static uint64_t entry_hash(const void *entry, uint64_t seed0, uint64_t seed1);
 
-entry_hash_map_t *entry_hash_map_init(void) {
-  entry_hash_map_t *hash_map = (entry_hash_map_t *)malloc(sizeof(entry_hash_map_t));
-
-  if (hash_map == NULL) {
-    return NULL;
-  }
-
-  hash_map->hashmap = hashmap_new(
-      sizeof(entry_hash_map_t *),
+uint8_t entry_hash_map_open(void) {
+  context.hashmap = hashmap_new(
+      sizeof(entry_header_t *),
       INITIAL_CAPACITY,
       SEED_VALUE,
       SEED_VALUE,
@@ -27,19 +28,23 @@ entry_hash_map_t *entry_hash_map_init(void) {
       entry_compare,
       NULL,
       NULL);
-  return hash_map;
+  
+  if (context.hashmap == NULL) {
+    return 1;
+  }
+
+  return 0;
 }
 
-void entry_hash_map_deinit(entry_hash_map_t *hash_map) {
-  hashmap_free(hash_map->hashmap);
-  free(hash_map);
+void entry_hash_map_close(void) {
+  if (context.hashmap != NULL) {
+    hashmap_free(context.hashmap);
+  }
 }
 
-entry_header_t *entry_hash_map_get(
-    entry_hash_map_t *hash_map,
-    entry_header_t *key_header) {
+entry_header_t *entry_hash_map_get(entry_header_t *key_header) {
   entry_header_t **header_pointer = (entry_header_t **)hashmap_get(
-      hash_map->hashmap,
+      context.hashmap,
       &key_header);
 
   if (header_pointer == NULL) {
@@ -48,19 +53,15 @@ entry_header_t *entry_hash_map_get(
   return *header_pointer;
 }
 
-void entry_hash_map_put(
-    entry_hash_map_t *hash_map,
-    entry_header_t *entry_header) {
+void entry_hash_map_put(entry_header_t *entry_header) {
   hashmap_set(
-      hash_map->hashmap,
+      context.hashmap,
       &entry_header);
 }
 
-void entry_hash_map_delete(
-    entry_hash_map_t *hash_map,
-    entry_header_t *key_header) {
+void entry_hash_map_delete(entry_header_t *key_header) {
   hashmap_delete(
-      hash_map->hashmap,
+      context.hashmap,
       &key_header);
 }
 

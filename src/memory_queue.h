@@ -4,7 +4,7 @@
 #include "entry_header.h"
 
 uint8_t memory_queue_open(uint64_t capacity);
-void memory_queue_close();
+void memory_queue_close(void);
 
 entry_header_t *memory_queue_put(uint16_t key_size, uint32_t value_size, uint64_t expiry);
 uint8_t memory_queue_expire(uint64_t time);

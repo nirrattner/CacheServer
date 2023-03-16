@@ -8,7 +8,7 @@
 #define CAPACITY (128)
 #define EXPIRY (100)
 
-static void it_inits(void) {
+static void it_opens(void) {
   PRINT_TEST()
   uint8_t result = memory_queue_open(CAPACITY);
   assert(result == 0);
@@ -107,7 +107,7 @@ static void it_puts_multiple(void) {
 // - Eviction scenarios
 
 int main() {
-  it_inits();
+  it_opens();
   it_puts();
   it_fails_to_put_over_capacity();
   it_puts_and_expires();

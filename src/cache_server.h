@@ -4,12 +4,10 @@
 #include <stdint.h>
 
 #include "connection.h"
-#include "entry_hash_map.h"
 
 typedef struct {
   connection_t *current_connection;
   connection_t *head_connection;
-  entry_hash_map_t *hash_map;
   int listen_file_descriptor;
   uint16_t active_connection_limit;
   uint16_t connection_count;
