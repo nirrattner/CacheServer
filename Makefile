@@ -17,6 +17,6 @@ test_entry_hash_map: obj/hashmap.o obj/entry_hash_map.o test_entry_hash_map.o
 test_connection_list: obj/connection.o obj/connection_list.o obj/test_connection_list.o
 	$(CC) -o bin/$@ $^ $(CFLAGS)
 
-cache_server: obj/time_util.o obj/connection.o obj/connection_list.o obj/hashmap.o obj/entry_hash_map.o obj/memory_queue.o obj/cache_server.o obj/main.o
+cache_server: obj/time_util.o obj/hashmap.o obj/entry_hash_map.o obj/memory_queue.o obj/connection.o obj/connection_list.o obj/cache_server.o obj/main.o
 	$(CC) -o bin/$@ $^ $(CFLAGS)
 

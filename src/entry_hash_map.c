@@ -53,6 +53,7 @@ entry_header_t *entry_hash_map_get(entry_header_t *key_header) {
   return *header_pointer;
 }
 
+// TODO: Check OOM
 void entry_hash_map_put(entry_header_t *entry_header) {
   hashmap_set(
       context.hashmap,
