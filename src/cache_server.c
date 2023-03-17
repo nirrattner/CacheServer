@@ -108,6 +108,7 @@ void cache_server_close(void) {
   memory_queue_close();
 }
 
+// TODO: Use poll or epoll/kqueue?
 void cache_server_proc(void) {
   if (context.current_connection == NULL
       || time_get_timestamp() - context.last_accept_timestamp > ACCEPT_PERIOD_MICROS) {
@@ -119,7 +120,6 @@ void cache_server_proc(void) {
   connection_result_t result = connection_proc(context.current_connection);
   switch (result) {
     case CONNECTION_RESULT__SUCCESS:
-      // TODO: Revise strategy?
       context.current_connection = connection_list_get_head();
       break;
 

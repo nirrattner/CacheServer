@@ -33,9 +33,10 @@ typedef enum {
 } request_flag_t;
 
 #pragma pack(1)
+// TODO: Separate `version` into connection header?
 typedef struct {
-  uint32_t version;
-  uint32_t flags;
+  uint16_t version;
+  uint8_t flags;
   uint8_t type;
 } request_header_t;
 

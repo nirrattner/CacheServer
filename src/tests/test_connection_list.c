@@ -10,6 +10,8 @@
 static connection_t *new_connection(int file_descriptor);
 static void assert_values(int *values, uint16_t value_count);
 
+// TODO: Test reinsert
+
 void it_opens(void) {
   PRINT_TEST()
   int expected_values[] = {};

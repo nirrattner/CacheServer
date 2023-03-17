@@ -44,6 +44,7 @@ typedef union {
   value_arguments_t value;
 } request_arguments_t;
 
+// TODO: Combine header and argument operations to reduce system calls
 struct connection {
   struct connection *previous;
   struct connection *next;
@@ -51,7 +52,6 @@ struct connection {
   entry_header_t *entry_header;
   uint32_t remaining_bytes;
   uint32_t buffer_index;
-  uint64_t last_interaction_timestamp;
   int file_descriptor;
   connection_state_t state;
   request_header_t header;
@@ -95,7 +95,6 @@ connection_t *connection_init(int file_descriptor) {
   connection->previous = NULL;
   connection->next = NULL;
   connection->file_descriptor = file_descriptor;
-  connection->last_interaction_timestamp = time_get_timestamp();
   init_request(connection);
   return connection;
 }
@@ -256,9 +255,10 @@ static void event_received_body(connection_t *connection) {
 
   switch (connection->header.type) {
     case REQUEST_TYPE__GET:
-      printf("GET[%.*s]\n", 
-          connection->entry_header->key_size,
-          (uint8_t *)connection->entry_header + sizeof(entry_header_t));
+      // TODO: Remove
+      // printf("GET[%.*s]\n", 
+      //     connection->entry_header->key_size,
+      //     (uint8_t *)connection->entry_header + sizeof(entry_header_t));
 
       header_result = entry_hash_map_get(connection->entry_header);
       free(connection->entry_header);
@@ -274,9 +274,10 @@ static void event_received_body(connection_t *connection) {
       break;
 
     case REQUEST_TYPE__DELETE:
-      printf("DELETE[%.*s]\n", 
-          connection->entry_header->key_size,
-          (uint8_t *)connection->entry_header + sizeof(entry_header_t));
+      // TODO: Remove
+      // printf("DELETE[%.*s]\n", 
+      //     connection->entry_header->key_size,
+      //     (uint8_t *)connection->entry_header + sizeof(entry_header_t));
 
       entry_hash_map_delete(connection->entry_header);
       free(connection->entry_header);
@@ -285,11 +286,15 @@ static void event_received_body(connection_t *connection) {
 
     case REQUEST_TYPE__PUT:
       result = entry_hash_map_put(connection->entry_header);
-      printf("PUT[%.*s]: %.*s\n", 
-          connection->entry_header->key_size,
-          (uint8_t *)connection->entry_header + sizeof(entry_header_t),
-          connection->entry_header->value_size,
-          (uint8_t *)connection->entry_header + sizeof(entry_header_t) + connection->entry_header->key_size);
+
+      // TODO: Remove
+      // printf("PUT[%.*s]: %.*s\n", 
+      //     connection->entry_header->key_size,
+      //     (uint8_t *)connection->entry_header + sizeof(entry_header_t),
+      //     connection->entry_header->value_size,
+      //     (uint8_t *)connection->entry_header + sizeof(entry_header_t) + connection->entry_header->key_size);
+
+      entry_hash_map_get(connection->entry_header);
 
       if (result) {
         send_header(connection, RESPONSE_TYPE__OUT_OF_MEMORY);
@@ -307,14 +312,15 @@ static void event_received_body(connection_t *connection) {
 
 static connection_result_t event_sent_header(connection_t *connection) {
   switch (connection->response_type) {
+    // TODO: Should all of these end connections?
     case RESPONSE_TYPE__KEY_OVERSIZED:
-    case RESPONSE_TYPE__NOT_FOUND:
     case RESPONSE_TYPE__OUT_OF_MEMORY:
     case RESPONSE_TYPE__UNKNOWN_REQUEST:
     case RESPONSE_TYPE__UNSUPPORTED_VERSION:
     case RESPONSE_TYPE__VALUE_OVERSIZED:
       connection->flags &= ~CONNECTION_FLAG__KEEP_ALIVE;
 
+    case RESPONSE_TYPE__NOT_FOUND:
     case RESPONSE_TYPE__OK:
     case RESPONSE_TYPE__PONG:
       return finish_request(connection);
@@ -402,17 +408,13 @@ static connection_result_t connection_transfer(connection_t *connection) {
   }
 
   if (result < 1) {
-    uint8_t no_transfer = result == 0 || errno == EWOULDBLOCK || errno == EAGAIN;
-    if (no_transfer
-        && !(time_get_timestamp() - connection->last_interaction_timestamp > CONNECTION_TIMEOUT_US)) {
+    if (result == 0 
+        || errno == EWOULDBLOCK 
+        || errno == EAGAIN) {
       return CONNECTION_RESULT__NO_TRANSFER;
     }
 
-    if (no_transfer) {
-      printf("Socket timeout\n");
-    } else {
-      printf("Socket failure \"%s\"\n", strerror(errno));
-    }
+    printf("Socket failure \"%s\"\n", strerror(errno));
 
     if (connection->flags & CONNECTION_FLAG__ALLOCATED_BUFFER) {
       free(connection->buffer);
@@ -420,7 +422,6 @@ static connection_result_t connection_transfer(connection_t *connection) {
     return CONNECTION_RESULT__DISCONNECT;
   }
 
-  connection->last_interaction_timestamp = time_get_timestamp();
   connection->remaining_bytes -= result;
   connection->buffer_index += result;
   return CONNECTION_RESULT__SUCCESS;

@@ -40,6 +40,7 @@ void connection_list_append(connection_t *connection) {
   }
 
   connection_set_previous(connection, context.tail);
+  connection_set_next(connection, NULL);
   connection_set_next(context.tail, connection);
   context.tail = connection;
 }

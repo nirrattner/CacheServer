@@ -49,6 +49,8 @@ class CacheProtocolStructInstance:
 
 class CacheProtocol:
   def __init__(self):
+    # TODO: Parse version from header
+    self.version = 1
     self.definitions = {}
     with open(INPUT_HEADER_FILE, 'r') as input_file:
       lines = []

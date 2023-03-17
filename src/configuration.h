@@ -3,6 +3,8 @@
 
 #include <stdint.h>
 
+// TODO: Write unit tests
+
 typedef enum {
   CONFIGURATION_TYPE__ACCEPT_PERIOD_MICROS = 0,
   CONFIGURATION_TYPE__CONNECTION_ACTIVE_LIMIT,

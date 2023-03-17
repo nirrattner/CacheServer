@@ -53,35 +53,35 @@ static void *default_values[NUM_CONFIGURATION_TYPE] = {
 };
 
 static configuration_type_t parse_key(const char *input) {
-  if (strcmp(input, "accept-period-micros") == 0) {
+  if (strcmp(input, "--accept-period-micros") == 0) {
     return CONFIGURATION_TYPE__ACCEPT_PERIOD_MICROS;
   }
 
-  if (strcmp(input, "active-connection-limit") == 0) {
+  if (strcmp(input, "--active-connection-limit") == 0) {
     return CONFIGURATION_TYPE__CONNECTION_ACTIVE_LIMIT;
   }
 
-  if (strcmp(input, "connection-backlog-limit") == 0) {
+  if (strcmp(input, "--connection-backlog-limit") == 0) {
     return CONFIGURATION_TYPE__CONNECTION_BACKLOG_LIMIT;
   }
 
-  if (strcmp(input, "connection-timeout-micros") == 0) {
+  if (strcmp(input, "--connection-timeout-micros") == 0) {
     return CONFIGURATION_TYPE__CONNECTION_TIMEOUT_MICROS;
   }
 
-  if (strcmp(input, "entry-capacity-bytes") == 0) {
+  if (strcmp(input, "--entry-capacity-bytes") == 0) {
     return CONFIGURATION_TYPE__ENTRY_CAPACITY_BYTES;
   }
 
-  if (strcmp(input, "entry-expiry-micros") == 0) {
+  if (strcmp(input, "--entry-expiry-micros") == 0) {
     return CONFIGURATION_TYPE__ENTRY_EXPIRY_MICROS;
   }
 
-  if (strcmp(input, "ip-address") == 0) {
+  if (strcmp(input, "--ip-address") == 0) {
     return CONFIGURATION_TYPE__IP_ADDRESS;
   }
 
-  if (strcmp(input, "port") == 0) {
+  if (strcmp(input, "--port") == 0) {
     return CONFIGURATION_TYPE__PORT;
   }
 
@@ -133,9 +133,11 @@ void configuration_parse(int argc, const char **argv) {
     switch (state) {
       case PARSE_STATE__AWAITING_KEY:
         type = parse_key(argv[index]);
+        state = PARSE_STATE__AWAITING_VALUE;
         break;
 
       case PARSE_STATE__AWAITING_VALUE:
+        state = PARSE_STATE__AWAITING_KEY;
         parse_value(argv[index], type);
         break;
     }

@@ -234,7 +234,7 @@ static bool resize(struct hashmap *map, size_t new_cap) {
             j = (j + 1) & map2->mask;
             entry->dib += 1;
         }
-	}
+    }
     map->free(map->buckets);
     map->buckets = map2->buckets;
     map->nbuckets = map2->nbuckets;
@@ -268,13 +268,13 @@ void *hashmap_set(struct hashmap *map, const void *item) {
     memcpy(bucket_item(entry), item, map->elsize);
 
     size_t i = entry->hash & map->mask;
-	for (;;) {
+    for (;;) {
         struct bucket *bucket = bucket_at(map, i);
         if (bucket->dib == 0) {
             memcpy(bucket, entry, map->bucketsz);
             map->count++;
-			return NULL;
-		}
+            return NULL;
+        }
         if (entry->hash == bucket->hash && 
             map->compare(bucket_item(entry), bucket_item(bucket), 
                          map->udata) == 0)
@@ -282,15 +282,15 @@ void *hashmap_set(struct hashmap *map, const void *item) {
             memcpy(map->spare, bucket_item(bucket), map->elsize);
             memcpy(bucket_item(bucket), bucket_item(entry), map->elsize);
             return map->spare;
-		}
+        }
         if (bucket->dib < entry->dib) {
             memcpy(map->spare, bucket, map->bucketsz);
             memcpy(bucket, entry, map->bucketsz);
             memcpy(entry, map->spare, map->bucketsz);
-		}
-		i = (i + 1) & map->mask;
+        }
+        i = (i + 1) & map->mask;
         entry->dib += 1;
-	}
+    }
 }
 
 // hashmap_get returns the item based on the provided key. If the item is not
@@ -300,19 +300,19 @@ void *hashmap_get(struct hashmap *map, const void *key) {
         panic("key is null");
     }
     uint64_t hash = get_hash(map, key);
-	size_t i = hash & map->mask;
-	for (;;) {
+    size_t i = hash & map->mask;
+    for (;;) {
         struct bucket *bucket = bucket_at(map, i);
-		if (!bucket->dib) {
-			return NULL;
-		}
-		if (bucket->hash == hash && 
+        if (!bucket->dib) {
+            return NULL;
+        }
+        if (bucket->hash == hash && 
             map->compare(key, bucket_item(bucket), map->udata) == 0)
         {
             return bucket_item(bucket);
-		}
-		i = (i + 1) & map->mask;
-	}
+        }
+        i = (i + 1) & map->mask;
+    }
 }
 
 // hashmap_probe returns the item in the bucket at position or NULL if an item
@@ -322,8 +322,8 @@ void *hashmap_probe(struct hashmap *map, uint64_t position) {
     size_t i = position & map->mask;
     struct bucket *bucket = bucket_at(map, i);
     if (!bucket->dib) {
-		return NULL;
-	}
+        return NULL;
+    }
     return bucket_item(bucket);
 }
 
@@ -336,13 +336,13 @@ void *hashmap_delete(struct hashmap *map, void *key) {
     }
     map->oom = false;
     uint64_t hash = get_hash(map, key);
-	size_t i = hash & map->mask;
-	for (;;) {
+    size_t i = hash & map->mask;
+    for (;;) {
         struct bucket *bucket = bucket_at(map, i);
-		if (!bucket->dib) {
-			return NULL;
-		}
-		if (bucket->hash == hash && 
+        if (!bucket->dib) {
+            return NULL;
+        }
+        if (bucket->hash == hash && 
             map->compare(key, bucket_item(bucket), map->udata) == 0)
         {
             memcpy(map->spare, bucket_item(bucket), map->elsize);
@@ -365,10 +365,10 @@ void *hashmap_delete(struct hashmap *map, void *key) {
                 // does not change the integrity of the data.
                 resize(map, map->nbuckets/2);
             }
-			return map->spare;
-		}
-		i = (i + 1) & map->mask;
-	}
+            return map->spare;
+        }
+        i = (i + 1) & map->mask;
+    }
 }
 
 // hashmap_count returns the number of items in the hash map.
@@ -531,7 +531,7 @@ static uint64_t SIP64(const uint8_t *in, const size_t inlen,
 // Murmur3_86_128
 //-----------------------------------------------------------------------------
 static void MM86128(const void *key, const int len, uint32_t seed, void *out) {
-#define	ROTL32(x, r) ((x << r) | (x >> (32 - r)))
+#define    ROTL32(x, r) ((x << r) | (x >> (32 - r)))
 #define FMIX32(h) h^=h>>16; h*=0x85ebca6b; h^=h>>13; h*=0xc2b2ae35; h^=h>>16;
     const uint8_t * data = (const uint8_t*)key;
     const int nblocks = len / 16;
