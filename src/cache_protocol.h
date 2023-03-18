@@ -41,6 +41,10 @@ typedef struct {
 } request_header_t;
 
 typedef struct {
+  uint8_t type;
+} response_header_t;
+
+typedef struct {
   uint16_t key_size;
 } key_arguments_t;
 

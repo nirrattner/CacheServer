@@ -27,16 +27,16 @@ typedef enum {
 } connection_state_t;
 
 typedef enum {
-  TRANSFER_TYPE__NONE = 0,
-  TRANSFER_TYPE__RECEIVE,
-  TRANSFER_TYPE__SEND,
-} transfer_type_t;
-
-typedef enum {
   CONNECTION_FLAG__NONE = 0,
-  CONNECTION_FLAG__KEEP_ALIVE = (1 << 0),
-  CONNECTION_FLAG__ALLOCATED_BUFFER = (1 << 1),
+  CONNECTION_FLAG__SENDING = (1 << 1),
+  CONNECTION_FLAG__KEEP_ALIVE = (1 << 2),
+  CONNECTION_FLAG__ALLOCATED_BUFFER = (1 << 3),
 } connection_flag_t;
+
+typedef union {
+  request_header_t request;
+  response_header_t response;
+} aggregate_header_t;
 
 typedef union {
   key_arguments_t key;
@@ -54,10 +54,8 @@ struct connection {
   uint32_t buffer_index;
   int file_descriptor;
   connection_state_t state;
-  request_header_t header;
+  aggregate_header_t header;
   request_arguments_t arguments;
-  response_type_t response_type;
-  transfer_type_t transfer_type;
   connection_flag_t flags;
 };
 
@@ -171,16 +169,16 @@ int connection_get_file_descriptor(connection_t *connection) {
 }
 
 static void event_received_header(connection_t *connection) {
-  if (connection->header.version != CACHE_PROTOCOL_VERSION) {
+  if (connection->header.request.version != CACHE_PROTOCOL_VERSION) {
       send_header(connection, RESPONSE_TYPE__UNSUPPORTED_VERSION);
       return;
   }
 
-  if (connection->header.flags & REQUEST_FLAG__KEEP_ALIVE) {
+  if (connection->header.request.flags & REQUEST_FLAG__KEEP_ALIVE) {
     connection->flags |= CONNECTION_FLAG__KEEP_ALIVE;
   }
 
-  switch (connection->header.type) {
+  switch (connection->header.request.type) {
     case REQUEST_TYPE__PING:
       send_header(connection, RESPONSE_TYPE__PONG);
       break;
@@ -209,7 +207,7 @@ static void event_received_header(connection_t *connection) {
 static void event_received_arguments(connection_t *connection) {
   // TODO: Validate arguments
 
-  switch (connection->header.type) {
+  switch (connection->header.request.type) {
     case REQUEST_TYPE__GET:
     case REQUEST_TYPE__DELETE:
       connection->entry_header = (entry_header_t *)malloc(sizeof(entry_header_t)
@@ -247,7 +245,7 @@ static void event_received_arguments(connection_t *connection) {
       break;
 
     default:
-      printf("Unsupported type for receive arguments %u\n", connection->header.type);
+      printf("Unsupported type for receive arguments %u\n", connection->header.request.type);
       assert(0);
       break;
    }
@@ -257,7 +255,7 @@ static void event_received_body(connection_t *connection) {
   uint8_t result;
   entry_header_t *header_result;
 
-  switch (connection->header.type) {
+  switch (connection->header.request.type) {
     case REQUEST_TYPE__GET:
       // TODO: Remove
       // printf("GET[%.*s]\n", 
@@ -308,14 +306,14 @@ static void event_received_body(connection_t *connection) {
       break;
 
     default:
-      printf("Unsupported type for receiving body %u\n", connection->header.type);
+      printf("Unsupported type for receiving body %u\n", connection->header.request.type);
       assert(0);
       break;
    }
 }
 
 static connection_result_t event_sent_header(connection_t *connection) {
-  switch (connection->response_type) {
+  switch (connection->header.response.type) {
     // TODO: Should all of these end connections?
     case RESPONSE_TYPE__KEY_OVERSIZED:
     case RESPONSE_TYPE__OUT_OF_MEMORY:
@@ -338,14 +336,14 @@ static connection_result_t event_sent_header(connection_t *connection) {
       return CONNECTION_RESULT__SUCCESS;
 
     default:
-      printf("Unsupported type for send header %u\n", connection->response_type);
+      printf("Unsupported type for send header %u\n", connection->header.response.type);
       assert(0);
       break;
   }
 }
 
 static void event_sent_arguments(connection_t *connection) {
-  switch (connection->response_type) {
+  switch (connection->header.response.type) {
     case RESPONSE_TYPE__VALUE:
       connection->buffer = (void *)connection->entry_header
           + sizeof(entry_header_t)
@@ -356,58 +354,47 @@ static void event_sent_arguments(connection_t *connection) {
       break;
 
     default:
-      printf("Unsupported type for send arguments %u\n", connection->response_type);
+      printf("Unsupported type for send arguments %u\n", connection->header.response.type);
       assert(0);
       break;
   }
 }
 
 static connection_result_t event_sent_body(connection_t *connection) {
-  switch (connection->response_type) {
+  switch (connection->header.response.type) {
     case RESPONSE_TYPE__VALUE:
       return finish_request(connection);
 
     default:
-      printf("Unsupported type for send body %u\n", connection->response_type);
+      printf("Unsupported type for send body %u\n", connection->header.response.type);
       assert(0);
       break;
   }
 }
 
 static void init_request(connection_t *connection) {
-  connection->response_type = RESPONSE_TYPE__NONE;
   connection->buffer = &connection->header;
   connection->remaining_bytes = sizeof(request_header_t);
   connection->buffer_index = 0;
   connection->state = CONNECTION_STATE__RECEIVING_HEADER;
-  connection->transfer_type = TRANSFER_TYPE__RECEIVE;
   connection->entry_header = NULL;
   connection->flags = CONNECTION_FLAG__NONE;
 }
 
 static connection_result_t connection_transfer(connection_t *connection) {
   int result;
-  switch (connection->transfer_type) {
-    case TRANSFER_TYPE__RECEIVE:
-      result = recv(
-          connection->file_descriptor,
-          connection->buffer + connection->buffer_index,
-          connection->remaining_bytes,
-          0);
-      break;
-
-    case TRANSFER_TYPE__SEND:
-      result = send(
-          connection->file_descriptor,
-          connection->buffer + connection->buffer_index,
-          connection->remaining_bytes,
-          0);
-      break;
-
-    default:
-      printf("Unsupported type for arguments %u\n", connection->header.type);
-      assert(0);
-      break;
+  if (connection->flags & CONNECTION_FLAG__SENDING) {
+    result = send(
+        connection->file_descriptor,
+        connection->buffer + connection->buffer_index,
+        connection->remaining_bytes,
+        0);
+  } else {
+    result = recv(
+        connection->file_descriptor,
+        connection->buffer + connection->buffer_index,
+        connection->remaining_bytes,
+        0);
   }
 
   if (result < 1) {
@@ -431,12 +418,12 @@ static connection_result_t connection_transfer(connection_t *connection) {
 }
 
 static void send_header(connection_t *connection, response_type_t type) {
-  connection->response_type = type;
-  connection->buffer = &connection->response_type;
-  connection->remaining_bytes = 1;
+  connection->header.response.type = type;
+  connection->buffer = &connection->header;
+  connection->remaining_bytes = sizeof(response_header_t);
   connection->buffer_index = 0;
   connection->state = CONNECTION_STATE__SENDING_HEADER;
-  connection->transfer_type = TRANSFER_TYPE__SEND;
+  connection->flags |= CONNECTION_FLAG__SENDING;
 }
 
 static connection_result_t finish_request(connection_t *connection) {
