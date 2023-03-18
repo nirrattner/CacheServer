@@ -7,15 +7,11 @@
 #include <sys/socket.h>
 #include <unistd.h>
 
+#include "configuration.h"
 #include "connection.h"
 #include "entry_hash_map.h"
 #include "memory_queue.h"
 #include "time_util.h"
-
-#define CONNECTION_TIMEOUT_US (15000)
-
-// TODO: Set configurable expiry
-#define EXPIRY_US (3600000)
 
 typedef enum {
   CONNECTION_STATE__RECEIVING_HEADER = 0,
@@ -28,9 +24,8 @@ typedef enum {
 
 typedef enum {
   CONNECTION_FLAG__NONE = 0,
-  CONNECTION_FLAG__SENDING = (1 << 1),
-  CONNECTION_FLAG__KEEP_ALIVE = (1 << 2),
-  CONNECTION_FLAG__ALLOCATED_BUFFER = (1 << 3),
+  CONNECTION_FLAG__KEEP_ALIVE = (1 << 0),
+  CONNECTION_FLAG__ALLOCATED_BUFFER = (1 << 1),
 } connection_flag_t;
 
 typedef union {
@@ -44,7 +39,8 @@ typedef union {
   value_arguments_t value;
 } request_arguments_t;
 
-// TODO: Combine header and argument operations to reduce system calls
+// TODO: Consolidate send header + argument into one system call
+// TODO: Create buffer layer for recevies to reduce system calls
 struct connection {
   struct connection *previous;
   struct connection *next;
@@ -230,7 +226,7 @@ static void event_received_arguments(connection_t *connection) {
       connection->entry_header = memory_queue_put(
           connection->arguments.key_value.key_size,
           connection->arguments.key_value.value_size,
-          time_get_timestamp() + EXPIRY_US);
+          time_get_timestamp() + configuration_get_int(CONFIGURATION_TYPE__ENTRY_EXPIRY_MICROS));
 
       if (connection->entry_header == NULL) {
         send_header(connection, RESPONSE_TYPE__OUT_OF_MEMORY);
@@ -383,20 +379,34 @@ static void init_request(connection_t *connection) {
 
 static connection_result_t connection_transfer(connection_t *connection) {
   int result;
-  if (connection->flags & CONNECTION_FLAG__SENDING) {
-    result = send(
-        connection->file_descriptor,
-        connection->buffer + connection->buffer_index,
-        connection->remaining_bytes,
-        0);
-  } else {
-    result = recv(
-        connection->file_descriptor,
-        connection->buffer + connection->buffer_index,
-        connection->remaining_bytes,
-        0);
+
+  switch (connection->state) {
+    case CONNECTION_STATE__RECEIVING_HEADER:
+    case CONNECTION_STATE__RECEIVING_ARGUMENTS:
+    case CONNECTION_STATE__RECEIVING_BODY:
+      result = recv(
+          connection->file_descriptor,
+          connection->buffer + connection->buffer_index,
+          connection->remaining_bytes,
+          0);
+      break;
+
+    case CONNECTION_STATE__SENDING_HEADER:
+    case CONNECTION_STATE__SENDING_ARGUMENTS:
+    case CONNECTION_STATE__SENDING_BODY:
+      result = send(
+          connection->file_descriptor,
+          connection->buffer + connection->buffer_index,
+          connection->remaining_bytes,
+          0);
+      break;
+
+    default:
+      printf("Unsupported state in transfer %u\n", connection->state);
+      assert(0);
   }
 
+  // TODO: Introduce timeout mid-request
   if (result < 1) {
     if (result == 0 
         || errno == EWOULDBLOCK 
@@ -423,7 +433,6 @@ static void send_header(connection_t *connection, response_type_t type) {
   connection->remaining_bytes = sizeof(response_header_t);
   connection->buffer_index = 0;
   connection->state = CONNECTION_STATE__SENDING_HEADER;
-  connection->flags |= CONNECTION_FLAG__SENDING;
 }
 
 static connection_result_t finish_request(connection_t *connection) {

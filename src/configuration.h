@@ -4,6 +4,7 @@
 #include <stdint.h>
 
 // TODO: Write unit tests
+// TODO: Consider less flexible parsing, one `get_` function per configuration
 
 typedef enum {
   CONFIGURATION_TYPE__ACCEPT_PERIOD_MICROS = 0,

@@ -27,6 +27,7 @@ typedef enum {
   RESPONSE_TYPE__VALUE_OVERSIZED,
 } response_type_t;
 
+// TODO: Default to keep alive, change flag to disconnect?
 typedef enum {
   REQUEST_FLAG__NONE = 0,
   REQUEST_FLAG__KEEP_ALIVE = (1 << 0),

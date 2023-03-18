@@ -1,6 +1,8 @@
 #ifndef _ENTRY_HEADER_H
 #define _ENTRY_HEADER_H
 
+// TODO: Add read lock to prevent deletions during read
+
 typedef struct {
   uint64_t active : 1;
   uint64_t end_of_buffer : 1;
