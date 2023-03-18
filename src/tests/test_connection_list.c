@@ -5,12 +5,11 @@
 #include <string.h>
 
 #include "connection_list.h"
+#include "mock_connection.h"
 #include "test_util.h"
 
 static connection_t *new_connection(int file_descriptor);
 static void assert_values(int *values, uint16_t value_count);
-
-// TODO: Test reinsert
 
 void it_opens(void) {
   PRINT_TEST()
@@ -37,8 +36,8 @@ void it_appends_and_gets(void) {
   assert(connection_list_get_tail() == connection);
   assert_values(expected_values, 1);
 
-  free(connection);
   connection_list_close();
+  connection_deinit(connection);
 }
 
 void it_appends_and_gets_multiple(void) {
@@ -59,10 +58,10 @@ void it_appends_and_gets_multiple(void) {
   assert(connection_list_get_tail() == connection_3);
   assert_values(expected_values, 3);
 
-  free(connection_1);
-  free(connection_2);
-  free(connection_3);
   connection_list_close();
+  connection_deinit(connection_1);
+  connection_deinit(connection_2);
+  connection_deinit(connection_3);
 }
 
 void it_appends_and_deletes_head(void) {
@@ -85,10 +84,10 @@ void it_appends_and_deletes_head(void) {
   assert(connection_list_get_tail() == connection_3);
   assert_values(expected_values, 2);
 
-  free(connection_1);
-  free(connection_2);
-  free(connection_3);
   connection_list_close();
+  connection_deinit(connection_1);
+  connection_deinit(connection_2);
+  connection_deinit(connection_3);
 }
 
 void it_appends_and_deletes_middle(void) {
@@ -111,10 +110,10 @@ void it_appends_and_deletes_middle(void) {
   assert(connection_list_get_tail() == connection_3);
   assert_values(expected_values, 2);
 
-  free(connection_1);
-  free(connection_2);
-  free(connection_3);
   connection_list_close();
+  connection_deinit(connection_1);
+  connection_deinit(connection_2);
+  connection_deinit(connection_3);
 }
 
 void it_appends_and_deletes_tail(void) {
@@ -137,10 +136,10 @@ void it_appends_and_deletes_tail(void) {
   assert(connection_list_get_tail() == connection_2);
   assert_values(expected_values, 2);
 
-  free(connection_1);
-  free(connection_2);
-  free(connection_3);
   connection_list_close();
+  connection_deinit(connection_1);
+  connection_deinit(connection_2);
+  connection_deinit(connection_3);
 }
 
 void it_appends_and_deletes_multiple(void) {
@@ -164,10 +163,10 @@ void it_appends_and_deletes_multiple(void) {
   assert(connection_list_get_tail() == connection_2);
   assert_values(expected_values, 1);
 
-  free(connection_1);
-  free(connection_2);
-  free(connection_3);
   connection_list_close();
+  connection_deinit(connection_1);
+  connection_deinit(connection_2);
+  connection_deinit(connection_3);
 }
 
 void it_deletes_all_and_appends(void) {
@@ -191,10 +190,64 @@ void it_deletes_all_and_appends(void) {
   assert(connection_list_get_tail() == connection_3);
   assert_values(expected_values, 1);
 
-  free(connection_1);
-  free(connection_2);
-  free(connection_3);
   connection_list_close();
+  connection_deinit(connection_1);
+  connection_deinit(connection_2);
+  connection_deinit(connection_3);
+}
+
+void it_reinserts_first(void) {
+  PRINT_TEST()
+
+  int expected_values[] = {2, 3, 1};
+  uint8_t result = connection_list_open();
+  assert(result == 0);
+
+  connection_t *connection_1 = new_connection(1);
+  connection_t *connection_2 = new_connection(2);
+  connection_t *connection_3 = new_connection(3);
+  connection_list_append(connection_1);
+  connection_list_append(connection_2);
+  connection_list_append(connection_3);
+
+  connection_list_remove(connection_1);
+  connection_list_append(connection_1);
+
+  assert(connection_list_get_head() == connection_2);
+  assert(connection_list_get_tail() == connection_1);
+  assert_values(expected_values, 3);
+
+  connection_list_close();
+  connection_deinit(connection_1);
+  connection_deinit(connection_2);
+  connection_deinit(connection_3);
+}
+
+void it_reinserts_middle(void) {
+  PRINT_TEST()
+
+  int expected_values[] = {1, 3, 2};
+  uint8_t result = connection_list_open();
+  assert(result == 0);
+
+  connection_t *connection_1 = new_connection(1);
+  connection_t *connection_2 = new_connection(2);
+  connection_t *connection_3 = new_connection(3);
+  connection_list_append(connection_1);
+  connection_list_append(connection_2);
+  connection_list_append(connection_3);
+
+  connection_list_remove(connection_2);
+  connection_list_append(connection_2);
+
+  assert(connection_list_get_head() == connection_1);
+  assert(connection_list_get_tail() == connection_2);
+  assert_values(expected_values, 3);
+
+  connection_list_close();
+  connection_deinit(connection_1);
+  connection_deinit(connection_2);
+  connection_deinit(connection_3);
 }
 
 static connection_t *new_connection(int file_descriptor) {
@@ -210,7 +263,7 @@ static void assert_values(int *values, uint16_t value_count) {
   uint16_t index;
 
   for (index = 0; index < value_count; index++) {
-    assert(values[index] == current_connection->file_descriptor);
+    assert(values[index] == connection_get_file_descriptor(current_connection));
     next_connection = connection_get_next(current_connection);
     if (index == value_count - 1) {
       assert(next_connection == NULL);
@@ -230,6 +283,8 @@ int main() {
   it_appends_and_deletes_tail();
   it_appends_and_deletes_multiple();
   it_deletes_all_and_appends();
+  it_reinserts_first();
+  it_reinserts_middle();
 
   return 0;
 }

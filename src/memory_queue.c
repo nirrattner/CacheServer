@@ -108,7 +108,6 @@ static void remove_entry(entry_header_t *entry_header) {
   context.read_index += total_size;
   context.occupied_bytes -= total_size;
 
-  // TODO: Remove from hash (if active?
   if (entry_header->active) {
     entry_hash_map_delete(entry_header);
   }

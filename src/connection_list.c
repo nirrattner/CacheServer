@@ -25,7 +25,6 @@ void connection_list_close(void) {
 
   while (current_connection) {
     next_connection = connection_get_next(current_connection);
-    connection_deinit(current_connection);
     current_connection = next_connection;
   }
 }

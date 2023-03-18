@@ -166,6 +166,10 @@ void connection_set_next(connection_t *connection, connection_t *next) {
   connection->next = next;
 }
 
+int connection_get_file_descriptor(connection_t *connection) {
+  return connection->file_descriptor;
+}
+
 static void event_received_header(connection_t *connection) {
   if (connection->header.version != CACHE_PROTOCOL_VERSION) {
       send_header(connection, RESPONSE_TYPE__UNSUPPORTED_VERSION);
@@ -381,7 +385,6 @@ static void init_request(connection_t *connection) {
   connection->flags = CONNECTION_FLAG__NONE;
 }
 
-// TODO: Cap individual transfer size?
 static connection_result_t connection_transfer(connection_t *connection) {
   int result;
   switch (connection->transfer_type) {
