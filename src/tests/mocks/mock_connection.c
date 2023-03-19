@@ -25,6 +25,7 @@ void connection_deinit(connection_t *connection) {
 }
 
 connection_result_t connection_proc(connection_t *connection) {
+  return CONNECTION_RESULT__SUCCESS;
 }
 
 void connection_close(connection_t *connection) {

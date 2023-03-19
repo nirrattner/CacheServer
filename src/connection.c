@@ -16,7 +16,9 @@
 typedef enum {
   CONNECTION_STATE__RECEIVING_HEADER = 0,
   CONNECTION_STATE__RECEIVING_ARGUMENTS,
+  CONNECTION_STATE__AWAITING_WRITE_UNBLOCK,
   CONNECTION_STATE__RECEIVING_BODY,
+  CONNECTION_STATE__AWAITING_READ_UNBLOCK,
   CONNECTION_STATE__SENDING_HEADER,
   CONNECTION_STATE__SENDING_ARGUMENTS,
   CONNECTION_STATE__SENDING_BODY,
@@ -56,14 +58,16 @@ struct connection {
 };
 
 static void event_received_header(connection_t *connection);
-static void event_received_arguments(connection_t *connection);
-static void event_received_body(connection_t *connection);
+static connection_result_t event_received_arguments(connection_t *connection);
+static connection_result_t event_received_body(connection_t *connection);
 static connection_result_t event_sent_header(connection_t *connection);
 static void event_sent_arguments(connection_t *connection);
 static connection_result_t event_sent_body(connection_t *connection);
 
 static void init_request(connection_t *connection);
 static connection_result_t connection_transfer(connection_t *connection);
+static connection_result_t attempt_memory_read(connection_t *connection);
+static connection_result_t attempt_memory_write(connection_t *connection);
 static void send_header(connection_t *connection, response_type_t type);
 static connection_result_t finish_request(connection_t *connection);
 
@@ -113,12 +117,10 @@ connection_result_t connection_proc(connection_t *connection) {
       break;
 
     case CONNECTION_STATE__RECEIVING_ARGUMENTS:
-      event_received_arguments(connection);
-      break;
+      return event_received_arguments(connection);
 
     case CONNECTION_STATE__RECEIVING_BODY:
-      event_received_body(connection);
-      break;
+      return event_received_body(connection);
 
     case CONNECTION_STATE__SENDING_HEADER:
       return event_sent_header(connection);
@@ -136,6 +138,20 @@ connection_result_t connection_proc(connection_t *connection) {
   }
 
   return CONNECTION_RESULT__SUCCESS;
+}
+
+connection_result_t connection_unblock_read(connection_t *connection) {
+  assert(connection->state == CONNECTION_STATE__AWAITING_READ_UNBLOCK);
+  if (connection->entry_header->active == 0) {
+    connection->entry_header = entry_hash_map_get(connection->entry_header);
+  }
+
+  return attempt_memory_read(connection);
+}
+
+connection_result_t connection_unblock_write(connection_t *connection) {
+  assert(connection->state == CONNECTION_STATE__AWAITING_WRITE_UNBLOCK);
+  return attempt_memory_write(connection);
 }
 
 void connection_close(connection_t *connection) {
@@ -160,8 +176,8 @@ void connection_set_next(connection_t *connection, connection_t *next) {
   connection->next = next;
 }
 
-int connection_get_file_descriptor(connection_t *connection) {
-  return connection->file_descriptor;
+entry_header_t *connection_get_entry_header(connection_t *connection) {
+  return connection->entry_header;
 }
 
 static void event_received_header(connection_t *connection) {
@@ -200,8 +216,9 @@ static void event_received_header(connection_t *connection) {
    }
 }
 
-static void event_received_arguments(connection_t *connection) {
+static connection_result_t event_received_arguments(connection_t *connection) {
   // TODO: Validate arguments
+  memory_queue_result_t result;
 
   switch (connection->header.request.type) {
     case REQUEST_TYPE__GET:
@@ -211,7 +228,7 @@ static void event_received_arguments(connection_t *connection) {
 
       if (connection->entry_header == NULL) {
         send_header(connection, RESPONSE_TYPE__OUT_OF_MEMORY);
-        return;
+        return CONNECTION_RESULT__SUCCESS;
       }
 
       connection->entry_header->key_size = connection->arguments.key.key_size;
@@ -223,31 +240,18 @@ static void event_received_arguments(connection_t *connection) {
       break;
 
     case REQUEST_TYPE__PUT:
-      connection->entry_header = memory_queue_put(
-          connection->arguments.key_value.key_size,
-          connection->arguments.key_value.value_size,
-          time_get_timestamp() + configuration_get_int(CONFIGURATION_TYPE__ENTRY_EXPIRY_MICROS));
-
-      if (connection->entry_header == NULL) {
-        send_header(connection, RESPONSE_TYPE__OUT_OF_MEMORY);
-        return;
-      }
-
-      connection->buffer = (void *)connection->entry_header + sizeof(entry_header_t);
-      connection->remaining_bytes = connection->arguments.key_value.key_size
-          + connection->arguments.key_value.value_size;
-      connection->buffer_index = 0;
-      connection->state = CONNECTION_STATE__RECEIVING_BODY;
-      break;
+      return attempt_memory_write(connection);
 
     default:
       printf("Unsupported type for receive arguments %u\n", connection->header.request.type);
       assert(0);
       break;
    }
+
+  return CONNECTION_RESULT__SUCCESS;
 }
 
-static void event_received_body(connection_t *connection) {
+static connection_result_t event_received_body(connection_t *connection) {
   uint8_t result;
   entry_header_t *header_result;
 
@@ -264,7 +268,13 @@ static void event_received_body(connection_t *connection) {
       connection->entry_header = header_result;
       if (connection->entry_header == NULL) {
         send_header(connection, RESPONSE_TYPE__NOT_FOUND);
-        return;
+        return CONNECTION_RESULT__SUCCESS;
+      }
+
+      entry_header_lock_event_t event = entry_header_acquire_lock(connection->entry_header);
+      if (event == ENTRY_HEADER_LOCK_EVENT__BLOCKED) {
+        connection->state = CONNECTION_STATE__AWAITING_READ_UNBLOCK;
+        return CONNECTION_RESULT__READ_BLOCKED;
       }
 
       // TODO: Check expiry
@@ -296,7 +306,7 @@ static void event_received_body(connection_t *connection) {
 
       if (result) {
         send_header(connection, RESPONSE_TYPE__OUT_OF_MEMORY);
-        return;
+        return CONNECTION_RESULT__SUCCESS;
       }
       send_header(connection, RESPONSE_TYPE__OK);
       break;
@@ -306,6 +316,8 @@ static void event_received_body(connection_t *connection) {
       assert(0);
       break;
    }
+
+   return CONNECTION_RESULT__SUCCESS;
 }
 
 static connection_result_t event_sent_header(connection_t *connection) {
@@ -359,6 +371,7 @@ static void event_sent_arguments(connection_t *connection) {
 static connection_result_t event_sent_body(connection_t *connection) {
   switch (connection->header.response.type) {
     case RESPONSE_TYPE__VALUE:
+      entry_header_release_lock(connection->entry_header);
       return finish_request(connection);
 
     default:
@@ -424,6 +437,49 @@ static connection_result_t connection_transfer(connection_t *connection) {
 
   connection->remaining_bytes -= result;
   connection->buffer_index += result;
+  return CONNECTION_RESULT__SUCCESS;
+}
+
+static connection_result_t attempt_memory_read(connection_t *connection) {
+  if (connection->entry_header == NULL) {
+    send_header(connection, RESPONSE_TYPE__NOT_FOUND);
+    return CONNECTION_RESULT__SUCCESS;
+  }
+
+  entry_header_lock_event_t event = entry_header_acquire_lock(connection->entry_header);
+  if (event == ENTRY_HEADER_LOCK_EVENT__BLOCKED) {
+    connection->state = CONNECTION_STATE__AWAITING_READ_UNBLOCK;
+    return CONNECTION_RESULT__READ_BLOCKED;
+  }
+
+  // TODO: Check expiry
+  send_header(connection, RESPONSE_TYPE__VALUE);
+  return CONNECTION_RESULT__SUCCESS;
+}
+
+static connection_result_t attempt_memory_write(connection_t *connection) {
+  memory_queue_result_t result = memory_queue_allocate(
+      connection->arguments.key_value.key_size,
+      connection->arguments.key_value.value_size,
+      time_get_timestamp() + configuration_get_int(CONFIGURATION_TYPE__ENTRY_EXPIRY_MICROS),
+      &connection->entry_header);
+
+  if (result == MEMORY_QUEUE_RESULT__OUT_OF_MEMORY) {
+    send_header(connection, RESPONSE_TYPE__OUT_OF_MEMORY);
+    return CONNECTION_RESULT__SUCCESS;
+  }
+
+  if (result == MEMORY_QUEUE_RESULT__WRITE_BLOCKED) {
+    connection->state = CONNECTION_STATE__AWAITING_WRITE_UNBLOCK;
+    return CONNECTION_RESULT__WRITE_BLOCKED;
+  }
+
+  connection->remaining_bytes = connection->arguments.key_value.key_size
+      + connection->arguments.key_value.value_size;
+  connection->buffer_index = 0;
+  connection->buffer = (void *)connection->entry_header + sizeof(entry_header_t);
+  connection->state = CONNECTION_STATE__RECEIVING_BODY;
+
   return CONNECTION_RESULT__SUCCESS;
 }
 
