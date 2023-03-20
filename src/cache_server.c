@@ -1,4 +1,5 @@
 #include <arpa/inet.h>
+#include <assert.h>
 #include <errno.h>
 #include <fcntl.h>
 #include <netinet/in.h>
@@ -118,6 +119,7 @@ void cache_server_proc(void) {
 
   connection_t *next_connection = get_next_connection();
   connection_result_t result = connection_proc(context.current_connection);
+
   switch (result) {
     case CONNECTION_RESULT__SUCCESS:
       context.current_connection = connection_list_get_head();
@@ -144,6 +146,15 @@ void cache_server_proc(void) {
         context.current_connection = next_connection;
       }
       break;
+
+    //TODO
+    case CONNECTION_RESULT__READ_BLOCKED:
+    case CONNECTION_RESULT__WRITE_BLOCKED:
+      break;
+
+    default:
+      assert(0);
+      printf("Unsupported connection result %u\n", result);
   }
 }
 
