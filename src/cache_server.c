@@ -10,6 +10,7 @@
 #include <sys/types.h>
 #include <unistd.h>
 
+#include "blocked_connections.h"
 #include "cache_server.h"
 #include "configuration.h"
 #include "connection_list.h"
@@ -30,6 +31,7 @@ static cache_server_context_t context;
 
 static uint8_t accept_connection(void);
 static connection_t *get_next_connection(void);
+static void handle_lock_release_event(void);
 
 uint8_t cache_server_open(void) {
   int result;
@@ -119,6 +121,7 @@ void cache_server_proc(void) {
 
   connection_t *next_connection = get_next_connection();
   connection_result_t result = connection_proc(context.current_connection);
+  handle_lock_release_event();
 
   switch (result) {
     case CONNECTION_RESULT__SUCCESS:
@@ -147,14 +150,19 @@ void cache_server_proc(void) {
       }
       break;
 
-    //TODO
     case CONNECTION_RESULT__READ_BLOCKED:
+      connection_list_remove(context.current_connection);
+      blocked_connections_add(context.current_connection, BLOCK_TYPE__READ);
+      break;
+
     case CONNECTION_RESULT__WRITE_BLOCKED:
+      connection_list_remove(context.current_connection);
+      blocked_connections_add(context.current_connection, BLOCK_TYPE__WRITE);
       break;
 
     default:
-      assert(0);
       printf("Unsupported connection result %u\n", result);
+      assert(0);
   }
 }
 
@@ -198,5 +206,47 @@ static connection_t *get_next_connection(void) {
 
   next = connection_list_get_head();
   return next;
+}
+
+static void handle_lock_release_event(void) {
+  block_type_t block_type;
+  connection_unblock_func_t unblock_func;
+  entry_header_lock_event_t lock_release_event = connection_get_lock_release_event(context.current_connection);
+
+  switch (lock_release_event) {
+    case ENTRY_HEADER_LOCK_EVENT__NONE: 
+      return;
+
+    case ENTRY_HEADER_LOCK_EVENT__READS_UNBLOCKED:
+      block_type = BLOCK_TYPE__READ;
+      unblock_func = connection_unblock_read;
+      break;
+
+    case ENTRY_HEADER_LOCK_EVENT__WRITES_UNBLOCKED:
+      block_type = BLOCK_TYPE__WRITE;
+      unblock_func = connection_unblock_write;
+      break;
+
+    default:
+      printf("Unsupported lock release event %u\n", lock_release_event);
+      assert(0);
+  }
+
+  connection_t *unblocked_connection = blocked_connections_pop(
+      connection_get_entry_header(context.current_connection),
+      block_type);
+  connection_result_t result;
+  while (unblocked_connection) {
+    result = unblock_func(unblocked_connection);
+    if (result != CONNECTION_RESULT__SUCCESS) {
+      blocked_connections_add(context.current_connection, block_type);
+      return;
+    }
+
+    connection_list_append(unblocked_connection);
+    unblocked_connection = blocked_connections_pop(
+        connection_get_entry_header(context.current_connection),
+        block_type);
+  }
 }
 

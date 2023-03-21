@@ -16,6 +16,7 @@ typedef enum {
 } connection_result_t;
 
 typedef struct connection connection_t;
+typedef connection_result_t (*connection_unblock_func_t)(connection_t *);
 
 connection_t *connection_init(int file_descriptor);
 void connection_deinit(connection_t *connection);
@@ -30,6 +31,7 @@ void connection_set_previous(connection_t *connection, connection_t *previous);
 connection_t *connection_get_next(connection_t *connection);
 void connection_set_next(connection_t *connection, connection_t *next);
 entry_header_t *connection_get_entry_header(connection_t *connection);
+entry_header_lock_event_t connection_get_lock_release_event(connection_t *connection);
 
 #endif
 
