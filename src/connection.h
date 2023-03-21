@@ -11,18 +11,15 @@ typedef enum {
   CONNECTION_RESULT__NO_TRANSFER,
   CONNECTION_RESULT__NEW_REQUEST,
   CONNECTION_RESULT__DISCONNECT,
-  CONNECTION_RESULT__READ_BLOCKED,
   CONNECTION_RESULT__WRITE_BLOCKED,
 } connection_result_t;
 
 typedef struct connection connection_t;
-typedef connection_result_t (*connection_unblock_func_t)(connection_t *);
 
 connection_t *connection_init(int file_descriptor);
 void connection_deinit(connection_t *connection);
 
 connection_result_t connection_proc(connection_t *connection);
-connection_result_t connection_unblock_read(connection_t *connection);
 connection_result_t connection_unblock_write(connection_t *connection);
 void connection_close(connection_t *connection);
 

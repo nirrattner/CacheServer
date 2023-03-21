@@ -18,7 +18,6 @@ typedef enum {
   CONNECTION_STATE__RECEIVING_ARGUMENTS,
   CONNECTION_STATE__AWAITING_WRITE_UNBLOCK,
   CONNECTION_STATE__RECEIVING_BODY,
-  CONNECTION_STATE__AWAITING_READ_UNBLOCK,
   CONNECTION_STATE__SENDING_HEADER,
   CONNECTION_STATE__SENDING_BODY,
   CONNECTION_STATE__AWAITING_FINISH,
@@ -72,7 +71,6 @@ static connection_result_t event_sent_body(connection_t *connection);
 
 static void init_request(connection_t *connection);
 static connection_result_t connection_transfer(connection_t *connection);
-static connection_result_t attempt_memory_read(connection_t *connection);
 static connection_result_t attempt_memory_write(connection_t *connection);
 static void send_header(connection_t *connection, response_type_t type);
 static connection_result_t finish_request(connection_t *connection);
@@ -140,15 +138,6 @@ connection_result_t connection_proc(connection_t *connection) {
   }
 
   return CONNECTION_RESULT__SUCCESS;
-}
-
-connection_result_t connection_unblock_read(connection_t *connection) {
-  assert(connection->state == CONNECTION_STATE__AWAITING_READ_UNBLOCK);
-  if (connection->entry_header->active == 0) {
-    connection->entry_header = entry_hash_map_get(connection->entry_header);
-  }
-
-  return attempt_memory_read(connection);
 }
 
 connection_result_t connection_unblock_write(connection_t *connection) {
@@ -272,7 +261,20 @@ static connection_result_t event_received_body(connection_t *connection) {
       free(connection->entry_header);
       connection->flags &= ~CONNECTION_FLAG__ALLOCATED_BUFFER;
       connection->entry_header = header_result;
-      return attempt_memory_read(connection);
+
+      if (connection->entry_header == NULL) {
+        send_header(connection, RESPONSE_TYPE__NOT_FOUND);
+        return CONNECTION_RESULT__SUCCESS;
+      }
+
+      entry_header_lock_event_t event = entry_header_acquire_lock(connection->entry_header);
+      connection->flags |= CONNECTION_FLAG__LOCK_ACQUIRED;
+
+      // TODO: Check expiry
+      send_header(connection, RESPONSE_TYPE__VALUE);
+      connection->header.response.argument.value_size = connection->entry_header->value_size;
+      connection->remaining_bytes = sizeof(aggregate_response_header_t);
+      break;
 
     case REQUEST_TYPE__DELETE:
       // TODO: Remove
@@ -417,26 +419,6 @@ static connection_result_t connection_transfer(connection_t *connection) {
 
   connection->remaining_bytes -= result;
   connection->buffer_index += result;
-  return CONNECTION_RESULT__SUCCESS;
-}
-
-static connection_result_t attempt_memory_read(connection_t *connection) {
-  if (connection->entry_header == NULL) {
-    send_header(connection, RESPONSE_TYPE__NOT_FOUND);
-    return CONNECTION_RESULT__SUCCESS;
-  }
-
-  entry_header_lock_event_t event = entry_header_acquire_lock(connection->entry_header);
-  if (event == ENTRY_HEADER_LOCK_EVENT__BLOCKED) {
-    connection->state = CONNECTION_STATE__AWAITING_READ_UNBLOCK;
-    return CONNECTION_RESULT__READ_BLOCKED;
-  }
-  connection->flags |= CONNECTION_FLAG__LOCK_ACQUIRED;
-
-  // TODO: Check expiry
-  send_header(connection, RESPONSE_TYPE__VALUE);
-  connection->header.response.argument.value_size = connection->entry_header->value_size;
-  connection->remaining_bytes = sizeof(aggregate_response_header_t);
   return CONNECTION_RESULT__SUCCESS;
 }
 
