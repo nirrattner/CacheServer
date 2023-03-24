@@ -2,6 +2,7 @@ import cache_client
 import random
 import string
 import sys
+import time
 
 from concurrent import futures
 
@@ -14,7 +15,7 @@ THREADS = 20
 def random_characters(size):
   return bytes(''.join(random.choice(string.ascii_letters) for i in range(size)), 'utf-8')
 
-def test_iteration(client):
+def test_iteration(client, index):
   key = random_characters(KEY_SIZE)
   value = random_characters(VALUE_SIZE)
 
@@ -29,14 +30,14 @@ def test_iteration(client):
   if actual_value != None:
     raise Exception(f'expected {value} but got {actual_value}')
 
-def test_thread_task(port):
-  print(f'Starting...')
+def test_thread_task(index, port):
+  print(f'Starting {index}...')
   client = cache_client.CacheClient(port=port)
   client.open()
   for iteration in range(ITERATION):
-    test_iteration(client)
+    test_iteration(client, index)
   client.close()
-  print(f'Done')
+  print(f'Done {index}')
 
 if __name__ == '__main__':
   port = 8888
@@ -44,7 +45,10 @@ if __name__ == '__main__':
     port = int(sys.argv[1])
 
   with futures.ThreadPoolExecutor(max_workers=THREADS) as executor:
-    futures = [executor.submit(test_thread_task, port) for thread in range(THREADS)]
-    for future in futures:
+    start_time = time.time()
+    futures = [executor.submit(test_thread_task, index, port) for index in range(THREADS)]
+    for index, future in enumerate(futures):
       future.result()
+    end_time = time.time()
+    print(f'Elapsed time {end_time - start_time}')
 

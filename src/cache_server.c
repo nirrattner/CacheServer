@@ -19,7 +19,7 @@
 #include "time_util.h"
 
 #define CONNECTION_BACKLOG_LIMIT (32)
-#define ACCEPT_PERIOD_MICROS (1000)
+#define POLL_TIMEOUT_MS (1000)
 
 typedef struct {
   uint64_t last_accept_timestamp;
@@ -27,9 +27,8 @@ typedef struct {
 
 static cache_server_context_t context;
 
-static uint8_t accept_connection(void);
-static connection_t *get_next_connection(void);
-static void handle_lock_release_event(void);
+static uint8_t accept_connection(int listen_file_descriptor);
+static void handle_lock_release_event(connection_t *current_connection);
 
 uint8_t cache_server_open(void) {
   int result;
@@ -98,7 +97,6 @@ uint8_t cache_server_open(void) {
   connection_list_set_listen_file_descriptor(listen_file_descriptor);
 
   printf("Starting server on %s:%d...\n", ip_address, port);
-
   return 0;
 }
 
@@ -108,60 +106,89 @@ void cache_server_close(void) {
   memory_queue_close();
 }
 
-// TODO: Use poll or epoll/kqueue?
+
+// TODO: Use epoll/kqueue?
 void cache_server_proc(void) {
-  // if (context.current_connection == NULL
-  //     || time_get_timestamp() - context.last_accept_timestamp > ACCEPT_PERIOD_MICROS) {
-  //   accept_connection();
-  //   return;
-  // }
+  connection_t *connection;
+  connection_result_t connection_result;
+  struct pollfd *pollfd;
+  uint32_t connection_list_size = connection_list_get_size();
 
-  // connection_t *next_connection = get_next_connection();
-  // connection_result_t result = connection_proc(context.current_connection);
-  // handle_lock_release_event();
+  int poll_result = poll(
+      connection_list_get_pollfds(),
+      connection_list_size + LISTEN_FILE_DESCRIPTOR_OFFSET,
+      POLL_TIMEOUT_MS);
+  // printf("Polling[%u] %d\n", connection_list_size, result);
 
-  // switch (result) {
-  //   case CONNECTION_RESULT__SUCCESS:
-  //     context.current_connection = connection_list_get_head();
-  //     break;
+  // TODO: Handle failures
+  if (poll_result == -1) {
+    printf("ERROR: Failed to poll -- %s\n", strerror(errno));
+    return;
+  }
 
-  //   case CONNECTION_RESULT__NO_TRANSFER:
-  //     context.current_connection = next_connection;
-  //     break;
+  // TODO: Check server capacity
+  pollfd = connection_list_get_listen_pollfd();
+  if (poll_result &&
+      pollfd->revents != 0) {
+    poll_result--;
+    accept_connection(pollfd->fd);
+  }
 
-  //   case CONNECTION_RESULT__NEW_REQUEST:
-  //     connection_list_remove(context.current_connection);
-  //     connection_list_append(context.current_connection);
-  //     context.current_connection = next_connection;
-  //     break;
+  for (uint32_t index = 0; poll_result && index < connection_list_size; index++) {
+    pollfd = connection_list_get_connection_pollfd(index);
+    if (pollfd->revents == 0) {
+      continue;
+    }
+    poll_result--;
 
-  //   case CONNECTION_RESULT__DISCONNECT:
-  //     connection_list_remove(context.current_connection);
-  //     connection_close(context.current_connection);
-  //     connection_deinit(context.current_connection);
+    connection = connection_list_get(index);
 
-  //     if (next_connection == context.current_connection) {
-  //       context.current_connection = NULL;
-  //     } else {
-  //       context.current_connection = next_connection;
-  //     }
-  //     break;
+    assert(connection_get_file_descriptor(connection) == pollfd->fd);
+    connection_result = connection_proc(connection);
+    handle_lock_release_event(connection);
 
-  //   case CONNECTION_RESULT__WRITE_BLOCKED:
-  //     connection_list_remove(context.current_connection);
-  //     blocked_connections_add(context.current_connection);
-  //     break;
+    switch (connection_result) {
+      case CONNECTION_RESULT__SUCCESS:
+      case CONNECTION_RESULT__NEW_REQUEST:
+        pollfd->events = connection_get_pollfd_events(connection);
+        break;
 
-  //   default:
-  //     printf("Unsupported connection result %u\n", result);
-  //     assert(0);
-  // }
+      case CONNECTION_RESULT__PARTIAL_TRANSFER:
+        break;
+
+      case CONNECTION_RESULT__NO_TRANSFER:
+        printf("WARN: No transfer\n");
+        break;
+
+      case CONNECTION_RESULT__DISCONNECT:
+        // TODO: Remove
+        // printf("Disconnected[%d]\n", pollfd->fd);
+
+        connection_list_remove(index);
+        connection_close(connection);
+        connection_deinit(connection);
+        index--;
+        connection_list_size--;
+        break;
+
+      case CONNECTION_RESULT__WRITE_BLOCKED:
+        connection_list_remove(index);
+        blocked_connections_add(connection);
+        index--;
+        connection_list_size--;
+        break;
+
+      default:
+        printf("Unsupported connection result %u\n", connection_result);
+        assert(0);
+    }
+  }
 }
 
-static uint8_t accept_connection(uint32_t listen_file_descriptor) {
+static uint8_t accept_connection(int listen_file_descriptor) {
   context.last_accept_timestamp = time_get_timestamp();
 
-  int client_file_descriptor = accept(context.listen_file_descriptor, NULL, NULL);
+  int client_file_descriptor = accept(listen_file_descriptor, NULL, NULL);
   if (client_file_descriptor == -1) {
     if (errno != EWOULDBLOCK && errno != EAGAIN) {
       printf("ERROR: Failed to accept -- %s\n", strerror(errno));
@@ -170,7 +197,7 @@ static uint8_t accept_connection(uint32_t listen_file_descriptor) {
     return 0;
   }
 
-  // TODO: connection_list should allocate 
+  // TODO: connection_list should allocate
   connection_t *connection = connection_init(client_file_descriptor);
   if (connection == NULL) {
     // TODO: Crash server?
@@ -179,47 +206,32 @@ static uint8_t accept_connection(uint32_t listen_file_descriptor) {
   }
 
   connection_list_add(connection);
-  if (context.current_connection == NULL) {
-    context.current_connection = connection;
-  }
 
   // TODO: Remove
-  printf("Connected!\n");
+  // printf("Connected[%d]\n", client_file_descriptor);
 
   return 0;
 }
 
-static connection_t *get_next_connection(void) {
-  // TODO: Logic to reset to head periodically?
-  // TODO: Logic to differentiate send vs receive states?
-  connection_t *next = connection_get_next(context.current_connection);
-  if (next != NULL) {
-    return next;
-  }
-
-  next = connection_list_get_head();
-  return next;
-}
-
-static void handle_lock_release_event(void) {
+static void handle_lock_release_event(connection_t *current_connection) {
   connection_t *connection;
   connection_result_t result;
-  entry_header_lock_event_t lock_release_event = connection_get_lock_release_event(context.current_connection);
+  entry_header_lock_event_t lock_release_event = connection_get_lock_release_event(current_connection);
 
   switch (lock_release_event) {
-    case ENTRY_HEADER_LOCK_EVENT__NONE: 
+    case ENTRY_HEADER_LOCK_EVENT__NONE:
       return;
 
     case ENTRY_HEADER_LOCK_EVENT__WRITES_UNBLOCKED:
-      connection = blocked_connections_pop(connection_get_entry_header(context.current_connection));
+      connection = blocked_connections_pop(connection_get_entry_header(current_connection));
       while (connection) {
         result = connection_unblock_write(connection);
         if (result != CONNECTION_RESULT__SUCCESS) {
-          blocked_connections_add(context.current_connection);
+          blocked_connections_add(connection);
           return;
         }
         connection_list_add(connection);
-        connection = blocked_connections_pop(connection_get_entry_header(context.current_connection));
+        connection = blocked_connections_pop(connection_get_entry_header(current_connection));
       }
       break;
 

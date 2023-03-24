@@ -9,6 +9,7 @@
 typedef enum {
   CONNECTION_RESULT__SUCCESS = 0,
   CONNECTION_RESULT__NO_TRANSFER,
+  CONNECTION_RESULT__PARTIAL_TRANSFER,
   CONNECTION_RESULT__NEW_REQUEST,
   CONNECTION_RESULT__DISCONNECT,
   CONNECTION_RESULT__WRITE_BLOCKED,
@@ -23,10 +24,8 @@ connection_result_t connection_proc(connection_t *connection);
 connection_result_t connection_unblock_write(connection_t *connection);
 void connection_close(connection_t *connection);
 
-// TODO: Remove next from connection -- only used for blocked_connections
 connection_t *connection_get_next(connection_t *connection);
 void connection_set_next(connection_t *connection, connection_t *next);
-
 int connection_get_file_descriptor(connection_t *connection);
 short connection_get_pollfd_events(connection_t *connection);
 entry_header_t *connection_get_entry_header(connection_t *connection);

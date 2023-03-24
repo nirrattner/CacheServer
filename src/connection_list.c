@@ -1,4 +1,5 @@
 #include <assert.h>
+#include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
 
@@ -7,6 +8,7 @@
 #define MIN_CAPACITY (4)
 
 // TODO: Downsize on time interval
+// TODO: Maintain active request connection double linked list for timeouts
 
 typedef struct {
   connection_t **connections;
@@ -80,16 +82,24 @@ void connection_list_remove(uint32_t index) {
 }
 
 void connection_list_set_listen_file_descriptor(int listen_file_descriptor) {
-  context.pollfds[0].fd = listen_file_descriptor;
-  context.pollfds[0].events = POLLIN;
+  context.pollfds[LISTEN_FILE_DESCRIPTOR_INDEX].fd = listen_file_descriptor;
+  context.pollfds[LISTEN_FILE_DESCRIPTOR_INDEX].events = POLLIN;
 }
 
-uint32_t connection_list_get_size(void) {
-  return context.size;
+struct pollfd *connection_list_get_listen_pollfd(void) {
+  return context.pollfds;
+}
+
+struct pollfd *connection_list_get_connection_pollfd(uint32_t index) {
+  return context.pollfds + index + LISTEN_FILE_DESCRIPTOR_OFFSET;
 }
 
 struct pollfd *connection_list_get_pollfds(void) {
   return context.pollfds;
+}
+
+uint32_t connection_list_get_size(void) {
+  return context.size;
 }
 
 static uint8_t resize(uint32_t capacity) {

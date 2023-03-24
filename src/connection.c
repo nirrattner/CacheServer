@@ -1,6 +1,7 @@
 #include <assert.h>
 #include <errno.h>
 #include <fcntl.h>
+#include <poll.h>
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
@@ -107,10 +108,6 @@ connection_result_t connection_proc(connection_t *connection) {
   connection_result_t result = connection_transfer(connection);
   if (result != CONNECTION_RESULT__SUCCESS) {
     return result;
-  }
-
-  if (connection->remaining_bytes != 0) {
-    return CONNECTION_RESULT__SUCCESS;
   }
 
   switch (connection->state) {
@@ -431,6 +428,9 @@ static connection_result_t connection_transfer(connection_t *connection) {
 
   connection->remaining_bytes -= result;
   connection->buffer_index += result;
+  if (connection->remaining_bytes != 0) {
+    return CONNECTION_RESULT__PARTIAL_TRANSFER;
+  }
   return CONNECTION_RESULT__SUCCESS;
 }
 

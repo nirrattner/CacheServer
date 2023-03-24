@@ -341,15 +341,18 @@ static connection_t *new_connection(int file_descriptor) {
 static void assert_values(int *values, uint32_t value_size) {
   assert(connection_list_get_size() == value_size);
   uint32_t index;
-  struct pollfd *pollfds = connection_list_get_pollfds();
+  struct pollfd *pollfd;
 
-  assert(pollfds[0].fd == LISTEN_FILE_DESCRIPTOR);
-  assert(pollfds[0].events == POLLIN);
+  pollfd = connection_list_get_listen_pollfd(); 
+  assert(pollfd->fd == LISTEN_FILE_DESCRIPTOR);
+  assert(pollfd->events == POLLIN);
 
   for (index = 0; index < value_size; index++) {
-    assert(values[index] == connection_get_file_descriptor(connection_list_get(index)));
-    assert(values[index] == pollfds[index + LISTEN_FILE_DESCRIPTOR_OFFSET].fd);
-    assert(pollfds[index + LISTEN_FILE_DESCRIPTOR_OFFSET].events == POLLIN);
+    assert(connection_get_file_descriptor(connection_list_get(index)) == values[index]);
+
+    pollfd = connection_list_get_connection_pollfd(index); 
+    assert(pollfd->fd == values[index]);
+    assert(pollfd->events == POLLIN);
   }
 }
 

@@ -33,7 +33,7 @@ static data_type_t data_types[NUM_CONFIGURATION_TYPE] = {
 };
 
 static int64_t default_accept_period_micros = 1000;
-static int64_t default_connection_active_limit = 16;
+static int64_t default_connection_active_limit = 1024;
 static int64_t default_connection_backlog_limit = 32;
 static int64_t default_connection_timeout_micros = 15000;
 static int64_t default_entry_capacity_bytes = 1024 * 1024;
