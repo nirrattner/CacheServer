@@ -23,10 +23,12 @@ connection_result_t connection_proc(connection_t *connection);
 connection_result_t connection_unblock_write(connection_t *connection);
 void connection_close(connection_t *connection);
 
-connection_t *connection_get_previous(connection_t *connection);
-void connection_set_previous(connection_t *connection, connection_t *previous);
+// TODO: Remove next from connection -- only used for blocked_connections
 connection_t *connection_get_next(connection_t *connection);
 void connection_set_next(connection_t *connection, connection_t *next);
+
+int connection_get_file_descriptor(connection_t *connection);
+short connection_get_pollfd_events(connection_t *connection);
 entry_header_t *connection_get_entry_header(connection_t *connection);
 entry_header_lock_event_t connection_get_lock_release_event(connection_t *connection);
 

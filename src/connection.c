@@ -20,7 +20,6 @@ typedef enum {
   CONNECTION_STATE__RECEIVING_BODY,
   CONNECTION_STATE__SENDING_HEADER,
   CONNECTION_STATE__SENDING_BODY,
-  CONNECTION_STATE__AWAITING_FINISH,
 } connection_state_t;
 
 typedef enum {
@@ -49,7 +48,6 @@ typedef union {
 
 // TODO: Create buffer layer for recevies to reduce system calls
 struct connection {
-  struct connection *previous;
   struct connection *next;
   void *buffer;
   entry_header_t *entry_header;
@@ -94,7 +92,6 @@ connection_t *connection_init(int file_descriptor) {
     return NULL;
   }
 
-  connection->previous = NULL;
   connection->next = NULL;
   connection->file_descriptor = file_descriptor;
   init_request(connection);
@@ -105,6 +102,7 @@ void connection_deinit(connection_t *connection) {
   free(connection);
 }
 
+// TODO: Provide pollfd revents?
 connection_result_t connection_proc(connection_t *connection) {
   connection_result_t result = connection_transfer(connection);
   if (result != CONNECTION_RESULT__SUCCESS) {
@@ -151,20 +149,34 @@ void connection_close(connection_t *connection) {
   }
 }
 
-connection_t *connection_get_previous(connection_t *connection) {
-  return connection->previous;
-}
-
-void connection_set_previous(connection_t *connection, connection_t *previous) {
-  connection->previous = previous;
-}
-
 connection_t *connection_get_next(connection_t *connection) {
   return connection->next;
 }
 
 void connection_set_next(connection_t *connection, connection_t *next) {
   connection->next = next;
+}
+
+int connection_get_file_descriptor(connection_t *connection) {
+  return connection->file_descriptor;
+}
+
+short connection_get_pollfd_events(connection_t *connection) {
+  switch (connection->state) {
+    case CONNECTION_STATE__RECEIVING_HEADER:
+    case CONNECTION_STATE__RECEIVING_ARGUMENTS:
+    case CONNECTION_STATE__RECEIVING_BODY:
+      return POLLIN;
+
+    case CONNECTION_STATE__SENDING_HEADER:
+    case CONNECTION_STATE__SENDING_BODY:
+      return POLLOUT;
+
+    default:
+      printf("Unsupported pollfd event state %u\n", connection->state);
+      assert(0);
+      break;
+  }
 }
 
 entry_header_t *connection_get_entry_header(connection_t *connection) {

@@ -1,80 +1,126 @@
 #include <assert.h>
 #include <stdlib.h>
+#include <string.h>
 
 #include "connection_list.h"
 
+#define MIN_CAPACITY (4)
+
+// TODO: Downsize on time interval
+
 typedef struct {
-  connection_t *head;
-  connection_t *tail;
-  uint16_t count;
+  connection_t **connections;
+  struct pollfd *pollfds;
+  uint32_t size;
+  uint32_t capacity;
+  uint32_t max_capacity;
 } connection_list_context_t;
 
 static connection_list_context_t context;
 
-uint8_t connection_list_open(void) {
-  context.head = NULL;
-  context.tail = NULL;
-  context.count = 0;
+static uint8_t resize(uint32_t size);
+
+uint8_t connection_list_open(uint32_t max_capacity) {
+  assert(MIN_CAPACITY <= max_capacity);
+
+  context.size = 0;
+  context.capacity = MIN_CAPACITY;
+  context.max_capacity = max_capacity;
+
+  context.connections = (connection_t **)malloc(context.capacity * sizeof(connection_t *));
+  context.pollfds = (struct pollfd *)malloc((context.capacity + LISTEN_FILE_DESCRIPTOR_OFFSET) * sizeof(struct pollfd));
+
+  if (context.connections == NULL
+      || context.pollfds == NULL) {
+    return 1;
+  }
 
   return 0;
 }
 
 void connection_list_close(void) {
-  connection_t *current_connection = context.head;
-  connection_t *next_connection;
+  free(context.connections);
+  free(context.pollfds);
+}
 
-  while (current_connection) {
-    next_connection = connection_get_next(current_connection);
-    current_connection = next_connection;
+uint8_t connection_list_add(connection_t *connection) {
+  uint32_t result;
+
+  if (context.size == context.max_capacity) {
+    return 1;
+  }
+
+  if (context.size == context.capacity) {
+    result = resize(context.capacity << 1);
+    if (result != 0) {
+      return result;
+    }
+  }
+
+  context.connections[context.size] = connection;
+  context.pollfds[context.size + LISTEN_FILE_DESCRIPTOR_OFFSET].fd = connection_get_file_descriptor(connection);
+  context.pollfds[context.size + LISTEN_FILE_DESCRIPTOR_OFFSET].events = connection_get_pollfd_events(connection);
+  context.size++;
+  return 0;
+}
+
+connection_t *connection_list_get(uint32_t index) {
+  assert(index < context.size);
+  return context.connections[index];
+}
+
+void connection_list_remove(uint32_t index) {
+  assert(index < context.size);
+  context.size--;
+
+  if (index != context.size) {
+    context.connections[index] = context.connections[context.size];
+    context.pollfds[index + LISTEN_FILE_DESCRIPTOR_OFFSET] = context.pollfds[context.size + LISTEN_FILE_DESCRIPTOR_OFFSET];
   }
 }
 
-void connection_list_append(connection_t *connection) {
-  context.count++;
+void connection_list_set_listen_file_descriptor(int listen_file_descriptor) {
+  context.pollfds[0].fd = listen_file_descriptor;
+  context.pollfds[0].events = POLLIN;
+}
 
-  if (context.head == NULL) {
-    context.head = connection;
-    context.tail = connection;
-    return;
+uint32_t connection_list_get_size(void) {
+  return context.size;
+}
+
+struct pollfd *connection_list_get_pollfds(void) {
+  return context.pollfds;
+}
+
+static uint8_t resize(uint32_t capacity) {
+  if (capacity > context.max_capacity) {
+    capacity = context.max_capacity;
+  } else if (capacity < MIN_CAPACITY) {
+    capacity = MIN_CAPACITY;
   }
 
-  connection_set_previous(connection, context.tail);
-  connection_set_next(connection, NULL);
-  connection_set_next(context.tail, connection);
-  context.tail = connection;
-}
+  assert(context.size <= capacity);
 
-void connection_list_remove(connection_t *connection) {
-  context.count--;
+  if (context.capacity == capacity) {
+    return 1;
+  }
+  context.capacity = capacity;
 
-  if (connection == context.tail) {
-    assert(connection_get_next(connection) == NULL);
-    context.tail = connection_get_previous(connection);
-  } else {
-    connection_set_previous(
-        connection_get_next(connection),
-        connection_get_previous(connection));
+  connection_t **new_connections = (connection_t **)malloc(context.capacity * sizeof(connection_t *));
+  struct pollfd *new_pollfds = (struct pollfd *)malloc((context.capacity + 1) * sizeof(struct pollfd));
+
+  if (new_connections == NULL
+      || new_pollfds == NULL) {
+    return 1;
   }
 
-  if (connection == context.head) {
-    assert(connection_get_previous(connection) == NULL);
-    context.head = connection_get_next(connection);
-  } else {
-    connection_set_next(
-        connection_get_previous(connection), 
-        connection_get_next(connection));
-  }
-}
+  memcpy(new_connections, context.connections, context.size * sizeof(connection_t *));
+  free(context.connections);
+  context.connections = new_connections;
 
-connection_t *connection_list_get_head(void) {
-  return context.head;
-}
+  memcpy(new_pollfds, context.pollfds, (context.size + LISTEN_FILE_DESCRIPTOR_OFFSET) * sizeof(struct pollfd));
+  free(context.pollfds);
+  context.pollfds = new_pollfds;
 
-connection_t *connection_list_get_tail(void) {
-  return context.tail;
+  return 0;
 }
-
-uint16_t connection_list_get_count(void) {
-  return context.count;
-}
-

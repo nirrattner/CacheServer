@@ -22,9 +22,7 @@
 #define ACCEPT_PERIOD_MICROS (1000)
 
 typedef struct {
-  connection_t *current_connection;
   uint64_t last_accept_timestamp;
-  int listen_file_descriptor;
 } cache_server_context_t;
 
 static cache_server_context_t context;
@@ -36,15 +34,14 @@ static void handle_lock_release_event(void);
 uint8_t cache_server_open(void) {
   int result;
   struct sockaddr_in server_listen_address;
+  int listen_file_descriptor;
 
   uint64_t entry_capacity_bytes = configuration_get_int(CONFIGURATION_TYPE__ENTRY_CAPACITY_BYTES);
   const char *ip_address = configuration_get_string(CONFIGURATION_TYPE__IP_ADDRESS);
   uint16_t port = configuration_get_int(CONFIGURATION_TYPE__PORT);
+  uint32_t active_connection_limit = configuration_get_int(CONFIGURATION_TYPE__CONNECTION_ACTIVE_LIMIT);
 
-  // TODO?
-  // uint16_t active_connection_limit = configuration_get_int(CONFIGURATION_TYPE__CONNECTION_ACTIVE_LIMIT);
-
-  result = connection_list_open()
+  result = connection_list_open(active_connection_limit)
       || entry_hash_map_open()
       || memory_queue_open(entry_capacity_bytes);
   if (result == 1) {
@@ -53,21 +50,21 @@ uint8_t cache_server_open(void) {
     return 1;
   }
 
-  context.listen_file_descriptor = socket(AF_INET, SOCK_STREAM, 0);
-  if (context.listen_file_descriptor == -1) {
+  listen_file_descriptor = socket(AF_INET, SOCK_STREAM, 0);
+  if (listen_file_descriptor == -1) {
     cache_server_close();
     printf("ERROR: Unable to allocate socket -- %s\n", strerror(errno));
     return 1;
   }
 
-  result = fcntl(context.listen_file_descriptor, F_GETFL);
+  result = fcntl(listen_file_descriptor, F_GETFL);
   if (result == -1) {
     cache_server_close();
     printf("ERROR: Unable to get flags -- %s\n", strerror(errno));
     return 1;
   }
 
-  result = fcntl(context.listen_file_descriptor, F_SETFL, result | O_NONBLOCK);
+  result = fcntl(listen_file_descriptor, F_SETFL, result | O_NONBLOCK);
   if (result == -1) {
     cache_server_close();
     printf("ERROR: Unable to set flags -- %s\n", strerror(errno));
@@ -79,7 +76,7 @@ uint8_t cache_server_open(void) {
   server_listen_address.sin_port = htons(port);
 
   result = bind(
-      context.listen_file_descriptor,
+      listen_file_descriptor,
       (struct sockaddr*)&server_listen_address,
       sizeof(struct sockaddr_in));
   if (result == -1) {
@@ -89,7 +86,7 @@ uint8_t cache_server_open(void) {
   }
 
   result = listen(
-      context.listen_file_descriptor,
+      listen_file_descriptor,
       CONNECTION_BACKLOG_LIMIT);
   if (result == -1) {
     cache_server_close();
@@ -97,8 +94,8 @@ uint8_t cache_server_open(void) {
     return 1;
   }
 
-  context.current_connection = NULL;
   context.last_accept_timestamp = 0;
+  connection_list_set_listen_file_descriptor(listen_file_descriptor);
 
   printf("Starting server on %s:%d...\n", ip_address, port);
 
@@ -113,55 +110,55 @@ void cache_server_close(void) {
 
 // TODO: Use poll or epoll/kqueue?
 void cache_server_proc(void) {
-  if (context.current_connection == NULL
-      || time_get_timestamp() - context.last_accept_timestamp > ACCEPT_PERIOD_MICROS) {
-    accept_connection();
-    return;
-  }
+  // if (context.current_connection == NULL
+  //     || time_get_timestamp() - context.last_accept_timestamp > ACCEPT_PERIOD_MICROS) {
+  //   accept_connection();
+  //   return;
+  // }
 
-  connection_t *next_connection = get_next_connection();
-  connection_result_t result = connection_proc(context.current_connection);
-  handle_lock_release_event();
+  // connection_t *next_connection = get_next_connection();
+  // connection_result_t result = connection_proc(context.current_connection);
+  // handle_lock_release_event();
 
-  switch (result) {
-    case CONNECTION_RESULT__SUCCESS:
-      context.current_connection = connection_list_get_head();
-      break;
+  // switch (result) {
+  //   case CONNECTION_RESULT__SUCCESS:
+  //     context.current_connection = connection_list_get_head();
+  //     break;
 
-    case CONNECTION_RESULT__NO_TRANSFER:
-      context.current_connection = next_connection;
-      break;
+  //   case CONNECTION_RESULT__NO_TRANSFER:
+  //     context.current_connection = next_connection;
+  //     break;
 
-    case CONNECTION_RESULT__NEW_REQUEST:
-      connection_list_remove(context.current_connection);
-      connection_list_append(context.current_connection);
-      context.current_connection = next_connection;
-      break;
+  //   case CONNECTION_RESULT__NEW_REQUEST:
+  //     connection_list_remove(context.current_connection);
+  //     connection_list_append(context.current_connection);
+  //     context.current_connection = next_connection;
+  //     break;
 
-    case CONNECTION_RESULT__DISCONNECT:
-      connection_list_remove(context.current_connection);
-      connection_close(context.current_connection);
-      connection_deinit(context.current_connection);
+  //   case CONNECTION_RESULT__DISCONNECT:
+  //     connection_list_remove(context.current_connection);
+  //     connection_close(context.current_connection);
+  //     connection_deinit(context.current_connection);
 
-      if (next_connection == context.current_connection) {
-        context.current_connection = NULL;
-      } else {
-        context.current_connection = next_connection;
-      }
-      break;
+  //     if (next_connection == context.current_connection) {
+  //       context.current_connection = NULL;
+  //     } else {
+  //       context.current_connection = next_connection;
+  //     }
+  //     break;
 
-    case CONNECTION_RESULT__WRITE_BLOCKED:
-      connection_list_remove(context.current_connection);
-      blocked_connections_add(context.current_connection);
-      break;
+  //   case CONNECTION_RESULT__WRITE_BLOCKED:
+  //     connection_list_remove(context.current_connection);
+  //     blocked_connections_add(context.current_connection);
+  //     break;
 
-    default:
-      printf("Unsupported connection result %u\n", result);
-      assert(0);
-  }
+  //   default:
+  //     printf("Unsupported connection result %u\n", result);
+  //     assert(0);
+  // }
 }
 
-static uint8_t accept_connection(void) {
+static uint8_t accept_connection(uint32_t listen_file_descriptor) {
   context.last_accept_timestamp = time_get_timestamp();
 
   int client_file_descriptor = accept(context.listen_file_descriptor, NULL, NULL);
@@ -173,6 +170,7 @@ static uint8_t accept_connection(void) {
     return 0;
   }
 
+  // TODO: connection_list should allocate 
   connection_t *connection = connection_init(client_file_descriptor);
   if (connection == NULL) {
     // TODO: Crash server?
@@ -180,7 +178,7 @@ static uint8_t accept_connection(void) {
     return 1;
   }
 
-  connection_list_append(connection);
+  connection_list_add(connection);
   if (context.current_connection == NULL) {
     context.current_connection = connection;
   }
@@ -220,7 +218,7 @@ static void handle_lock_release_event(void) {
           blocked_connections_add(context.current_connection);
           return;
         }
-        connection_list_append(connection);
+        connection_list_add(connection);
         connection = blocked_connections_pop(connection_get_entry_header(context.current_connection));
       }
       break;

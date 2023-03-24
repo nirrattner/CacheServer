@@ -9,53 +9,66 @@
 #include "test_util.h"
 
 static connection_t *new_connection(int file_descriptor);
-static void assert_values(int *values, uint16_t value_count);
+static void assert_values(int *values, uint32_t value_size);
+
+#define MAX_CAPACITY (16)
+#define LISTEN_FILE_DESCRIPTOR (9999)
 
 void it_opens(void) {
   PRINT_TEST()
   int expected_values[] = {};
-  uint8_t result = connection_list_open();
+  uint8_t result = connection_list_open(MAX_CAPACITY);
   assert(result == 0);
-  assert(connection_list_get_count() == 0);
+
+  connection_list_set_listen_file_descriptor(LISTEN_FILE_DESCRIPTOR);
+
+  assert(connection_list_get_size() == 0);
   assert_values(expected_values, 0);
 
   connection_list_close();
 }
 
-void it_appends_and_gets(void) {
+void it_adds_and_gets(void) {
   PRINT_TEST()
 
   int expected_values[] = {1};
-  uint8_t result = connection_list_open();
+  uint8_t result = connection_list_open(MAX_CAPACITY);
   assert(result == 0);
 
-  connection_t *connection = new_connection(1);
-  connection_list_append(connection);
+  connection_list_set_listen_file_descriptor(LISTEN_FILE_DESCRIPTOR);
 
-  assert(connection_list_get_head() == connection);
-  assert(connection_list_get_tail() == connection);
+  connection_t *connection = new_connection(1);
+  result = connection_list_add(connection);
+  assert(result == 0);
+
   assert_values(expected_values, 1);
 
   connection_list_close();
   connection_deinit(connection);
 }
 
-void it_appends_and_gets_multiple(void) {
+void it_adds_and_gets_multiple(void) {
   PRINT_TEST()
 
   int expected_values[] = {1, 2, 3};
-  uint8_t result = connection_list_open();
+  uint8_t result = connection_list_open(MAX_CAPACITY);
   assert(result == 0);
+
+  connection_list_set_listen_file_descriptor(LISTEN_FILE_DESCRIPTOR);
 
   connection_t *connection_1 = new_connection(1);
   connection_t *connection_2 = new_connection(2);
   connection_t *connection_3 = new_connection(3);
-  connection_list_append(connection_1);
-  connection_list_append(connection_2);
-  connection_list_append(connection_3);
 
-  assert(connection_list_get_head() == connection_1);
-  assert(connection_list_get_tail() == connection_3);
+  result = connection_list_add(connection_1);
+  assert(result == 0);
+
+  result = connection_list_add(connection_2);
+  assert(result == 0);
+
+  result = connection_list_add(connection_3);
+  assert(result == 0);
+
   assert_values(expected_values, 3);
 
   connection_list_close();
@@ -64,24 +77,30 @@ void it_appends_and_gets_multiple(void) {
   connection_deinit(connection_3);
 }
 
-void it_appends_and_deletes_head(void) {
+void it_adds_and_deletes_head(void) {
   PRINT_TEST()
 
-  int expected_values[] = {2, 3};
-  uint8_t result = connection_list_open();
+  int expected_values[] = {3, 2};
+  uint8_t result = connection_list_open(MAX_CAPACITY);
   assert(result == 0);
+
+  connection_list_set_listen_file_descriptor(LISTEN_FILE_DESCRIPTOR);
 
   connection_t *connection_1 = new_connection(1);
   connection_t *connection_2 = new_connection(2);
   connection_t *connection_3 = new_connection(3);
-  connection_list_append(connection_1);
-  connection_list_append(connection_2);
-  connection_list_append(connection_3);
 
-  connection_list_remove(connection_1);
+  result = connection_list_add(connection_1);
+  assert(result == 0);
 
-  assert(connection_list_get_head() == connection_2);
-  assert(connection_list_get_tail() == connection_3);
+  result = connection_list_add(connection_2);
+  assert(result == 0);
+
+  result = connection_list_add(connection_3);
+  assert(result == 0);
+
+  connection_list_remove(0);
+
   assert_values(expected_values, 2);
 
   connection_list_close();
@@ -90,24 +109,30 @@ void it_appends_and_deletes_head(void) {
   connection_deinit(connection_3);
 }
 
-void it_appends_and_deletes_middle(void) {
+void it_adds_and_deletes_middle(void) {
   PRINT_TEST()
 
   int expected_values[] = {1, 3};
-  uint8_t result = connection_list_open();
+  uint8_t result = connection_list_open(MAX_CAPACITY);
   assert(result == 0);
+
+  connection_list_set_listen_file_descriptor(LISTEN_FILE_DESCRIPTOR);
 
   connection_t *connection_1 = new_connection(1);
   connection_t *connection_2 = new_connection(2);
   connection_t *connection_3 = new_connection(3);
-  connection_list_append(connection_1);
-  connection_list_append(connection_2);
-  connection_list_append(connection_3);
 
-  connection_list_remove(connection_2);
+  result = connection_list_add(connection_1);
+  assert(result == 0);
 
-  assert(connection_list_get_head() == connection_1);
-  assert(connection_list_get_tail() == connection_3);
+  result = connection_list_add(connection_2);
+  assert(result == 0);
+
+  result = connection_list_add(connection_3);
+  assert(result == 0);
+
+  connection_list_remove(1);
+
   assert_values(expected_values, 2);
 
   connection_list_close();
@@ -116,24 +141,30 @@ void it_appends_and_deletes_middle(void) {
   connection_deinit(connection_3);
 }
 
-void it_appends_and_deletes_tail(void) {
+void it_adds_and_deletes_tail(void) {
   PRINT_TEST()
 
   int expected_values[] = {1, 2};
-  uint8_t result = connection_list_open();
+  uint8_t result = connection_list_open(MAX_CAPACITY);
   assert(result == 0);
+
+  connection_list_set_listen_file_descriptor(LISTEN_FILE_DESCRIPTOR);
 
   connection_t *connection_1 = new_connection(1);
   connection_t *connection_2 = new_connection(2);
   connection_t *connection_3 = new_connection(3);
-  connection_list_append(connection_1);
-  connection_list_append(connection_2);
-  connection_list_append(connection_3);
 
-  connection_list_remove(connection_3);
+  result = connection_list_add(connection_1);
+  assert(result == 0);
 
-  assert(connection_list_get_head() == connection_1);
-  assert(connection_list_get_tail() == connection_2);
+  result = connection_list_add(connection_2);
+  assert(result == 0);
+
+  result = connection_list_add(connection_3);
+  assert(result == 0);
+
+  connection_list_remove(2);
+
   assert_values(expected_values, 2);
 
   connection_list_close();
@@ -142,25 +173,31 @@ void it_appends_and_deletes_tail(void) {
   connection_deinit(connection_3);
 }
 
-void it_appends_and_deletes_multiple(void) {
+void it_adds_and_deletes_multiple(void) {
   PRINT_TEST()
 
   int expected_values[] = {2};
-  uint8_t result = connection_list_open();
+  uint8_t result = connection_list_open(MAX_CAPACITY);
   assert(result == 0);
+
+  connection_list_set_listen_file_descriptor(LISTEN_FILE_DESCRIPTOR);
 
   connection_t *connection_1 = new_connection(1);
   connection_t *connection_2 = new_connection(2);
   connection_t *connection_3 = new_connection(3);
-  connection_list_append(connection_1);
-  connection_list_append(connection_2);
-  connection_list_append(connection_3);
 
-  connection_list_remove(connection_1);
-  connection_list_remove(connection_3);
+  result = connection_list_add(connection_1);
+  assert(result == 0);
 
-  assert(connection_list_get_head() == connection_2);
-  assert(connection_list_get_tail() == connection_2);
+  result = connection_list_add(connection_2);
+  assert(result == 0);
+
+  result = connection_list_add(connection_3);
+  assert(result == 0);
+
+  connection_list_remove(0);
+  connection_list_remove(0);
+
   assert_values(expected_values, 1);
 
   connection_list_close();
@@ -169,25 +206,30 @@ void it_appends_and_deletes_multiple(void) {
   connection_deinit(connection_3);
 }
 
-void it_deletes_all_and_appends(void) {
+void it_deletes_all_and_adds(void) {
   PRINT_TEST()
 
   int expected_values[] = {3};
-  uint8_t result = connection_list_open();
+  uint8_t result = connection_list_open(MAX_CAPACITY);
   assert(result == 0);
+
+  connection_list_set_listen_file_descriptor(LISTEN_FILE_DESCRIPTOR);
 
   connection_t *connection_1 = new_connection(1);
   connection_t *connection_2 = new_connection(2);
   connection_t *connection_3 = new_connection(3);
-  connection_list_append(connection_1);
-  connection_list_append(connection_2);
-  connection_list_remove(connection_1);
-  connection_list_remove(connection_2);
 
-  connection_list_append(connection_3);
+  result = connection_list_add(connection_1);
+  assert(result == 0);
 
-  assert(connection_list_get_head() == connection_3);
-  assert(connection_list_get_tail() == connection_3);
+  result = connection_list_add(connection_2);
+  assert(result == 0);
+
+  connection_list_remove(0);
+  connection_list_remove(0);
+
+  connection_list_add(connection_3);
+
   assert_values(expected_values, 1);
 
   connection_list_close();
@@ -199,22 +241,28 @@ void it_deletes_all_and_appends(void) {
 void it_reinserts_first(void) {
   PRINT_TEST()
 
-  int expected_values[] = {2, 3, 1};
-  uint8_t result = connection_list_open();
+  int expected_values[] = {3, 2, 1};
+  uint8_t result = connection_list_open(MAX_CAPACITY);
   assert(result == 0);
+
+  connection_list_set_listen_file_descriptor(LISTEN_FILE_DESCRIPTOR);
 
   connection_t *connection_1 = new_connection(1);
   connection_t *connection_2 = new_connection(2);
   connection_t *connection_3 = new_connection(3);
-  connection_list_append(connection_1);
-  connection_list_append(connection_2);
-  connection_list_append(connection_3);
 
-  connection_list_remove(connection_1);
-  connection_list_append(connection_1);
+  result = connection_list_add(connection_1);
+  assert(result == 0);
 
-  assert(connection_list_get_head() == connection_2);
-  assert(connection_list_get_tail() == connection_1);
+  result = connection_list_add(connection_2);
+  assert(result == 0);
+
+  result = connection_list_add(connection_3);
+  assert(result == 0);
+
+  connection_list_remove(0);
+  connection_list_add(connection_1);
+
   assert_values(expected_values, 3);
 
   connection_list_close();
@@ -227,21 +275,27 @@ void it_reinserts_middle(void) {
   PRINT_TEST()
 
   int expected_values[] = {1, 3, 2};
-  uint8_t result = connection_list_open();
+  uint8_t result = connection_list_open(MAX_CAPACITY);
   assert(result == 0);
+
+  connection_list_set_listen_file_descriptor(LISTEN_FILE_DESCRIPTOR);
 
   connection_t *connection_1 = new_connection(1);
   connection_t *connection_2 = new_connection(2);
   connection_t *connection_3 = new_connection(3);
-  connection_list_append(connection_1);
-  connection_list_append(connection_2);
-  connection_list_append(connection_3);
 
-  connection_list_remove(connection_2);
-  connection_list_append(connection_2);
+  result = connection_list_add(connection_1);
+  assert(result == 0);
 
-  assert(connection_list_get_head() == connection_1);
-  assert(connection_list_get_tail() == connection_2);
+  result = connection_list_add(connection_2);
+  assert(result == 0);
+
+  result = connection_list_add(connection_3);
+  assert(result == 0);
+
+  connection_list_remove(1);
+  connection_list_add(connection_2);
+
   assert_values(expected_values, 3);
 
   connection_list_close();
@@ -250,41 +304,67 @@ void it_reinserts_middle(void) {
   connection_deinit(connection_3);
 }
 
+void it_resizes_on_add(void) {
+  PRINT_TEST()
+
+  uint8_t index;
+  uint8_t size = 10;
+  int expected_values[size];
+  connection_t *connections[size];
+
+  uint8_t result = connection_list_open(MAX_CAPACITY);
+  assert(result == 0);
+
+  connection_list_set_listen_file_descriptor(LISTEN_FILE_DESCRIPTOR);
+
+  for (index = 0; index < size; index++) {
+    expected_values[index] = index;
+    connections[index] = new_connection(index);
+    result = connection_list_add(connections[index]);
+    assert(result == 0);
+  }
+
+  assert_values(expected_values, size);
+
+  connection_list_close();
+  for (index = 0; index < size; index++) {
+    connection_deinit(connections[index]);
+  }
+}
+
 static connection_t *new_connection(int file_descriptor) {
   connection_t *connection = connection_init(file_descriptor);
   assert(connection != NULL);
   return connection;
 }
 
-static void assert_values(int *values, uint16_t value_count) {
-  assert(connection_list_get_count() == value_count);
-  connection_t *current_connection = connection_list_get_head();
-  connection_t *next_connection;
-  uint16_t index;
+static void assert_values(int *values, uint32_t value_size) {
+  assert(connection_list_get_size() == value_size);
+  uint32_t index;
+  struct pollfd *pollfds = connection_list_get_pollfds();
 
-  for (index = 0; index < value_count; index++) {
-    assert(values[index] == connection_get_file_descriptor(current_connection));
-    next_connection = connection_get_next(current_connection);
-    if (index == value_count - 1) {
-      assert(next_connection == NULL);
-    } else {
-      assert(connection_get_previous(next_connection) == current_connection);
-    }
-    current_connection = next_connection;
+  assert(pollfds[0].fd == LISTEN_FILE_DESCRIPTOR);
+  assert(pollfds[0].events == POLLIN);
+
+  for (index = 0; index < value_size; index++) {
+    assert(values[index] == connection_get_file_descriptor(connection_list_get(index)));
+    assert(values[index] == pollfds[index + LISTEN_FILE_DESCRIPTOR_OFFSET].fd);
+    assert(pollfds[index + LISTEN_FILE_DESCRIPTOR_OFFSET].events == POLLIN);
   }
 }
 
 int main() {
   it_opens();
-  it_appends_and_gets();
-  it_appends_and_gets_multiple();
-  it_appends_and_deletes_head();
-  it_appends_and_deletes_middle();
-  it_appends_and_deletes_tail();
-  it_appends_and_deletes_multiple();
-  it_deletes_all_and_appends();
+  it_adds_and_gets();
+  it_adds_and_gets_multiple();
+  it_adds_and_deletes_head();
+  it_adds_and_deletes_middle();
+  it_adds_and_deletes_tail();
+  it_adds_and_deletes_multiple();
+  it_deletes_all_and_adds();
   it_reinserts_first();
   it_reinserts_middle();
+  it_resizes_on_add();
 
   return 0;
 }

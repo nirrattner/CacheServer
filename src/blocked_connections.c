@@ -76,7 +76,6 @@ static blocked_connection_list_t *blocked_connection_list_init(connection_t *con
     return NULL;
   }
 
-  connection_set_previous(connection, NULL);
   connection_set_next(connection, NULL);
 
   list->head = connection;
@@ -95,7 +94,6 @@ static void blocked_connection_list_deinit(blocked_connection_list_t *list) {
 
 static void blocked_connection_list_append(blocked_connection_list_t *list, connection_t *connection) {
   connection_set_next(connection, NULL);
-  connection_set_previous(connection, NULL);
 
   connection_set_next(list->tail, connection);
   list->tail = connection;

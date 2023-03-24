@@ -1,3 +1,4 @@
+#include <poll.h>
 #include <stdlib.h>
 
 #include "connection.h"
@@ -49,5 +50,9 @@ void connection_set_next(connection_t *connection, connection_t *next) {
 
 int connection_get_file_descriptor(connection_t *connection) {
   return connection->file_descriptor;
+}
+
+short connection_get_pollfd_events(connection_t *connection) {
+  return POLLIN;
 }
 
